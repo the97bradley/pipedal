@@ -5,6 +5,7 @@ on:
     branches: [ main, dev ]
     paths-ignore:
       - "docs/**"
+      - "hardware/**"
   #pull_request:
   #  branches: [ main ]
     

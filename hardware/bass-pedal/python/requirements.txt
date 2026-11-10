@@ -1,0 +1,3 @@
+# Install on the Raspberry Pi only. Tests do not need these.
+smbus2
+spidev

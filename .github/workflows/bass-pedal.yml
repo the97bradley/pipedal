@@ -1,0 +1,23 @@
+name: Bass pedal GPIO
+
+on:
+  push:
+    paths:
+      - "hardware/bass-pedal/**"
+      - ".github/workflows/bass-pedal.yml"
+  pull_request:
+    paths:
+      - "hardware/bass-pedal/**"
+      - ".github/workflows/bass-pedal.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        working-directory: hardware/bass-pedal/python
+        run: python3 -m unittest discover -s tests -v
