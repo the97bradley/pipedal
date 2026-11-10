@@ -1,13 +1,16 @@
-"""PCF8575 16-bit quasi-bidirectional I/O expander.
+"""PCF8575 16-bit I/O expander (PCF8574 also accepted).
 
-Pin numbering matches the Adafruit / typical-breakout silk (P0–P15):
+This pedal uses two PCF8575s on the dedicated BCM 22/23 I2C bus:
 
-    P0–P7  = TI P00–P07 (written as the first I2C data byte)
-    P8–P15 = TI P10–P17 (written as the second I2C data byte)
+    0x20  A0/A1/A2 low   OLED CS / DC / RESET
+    0x21  A0 high        footswitches
 
-The part powers up with every pin high (weak current source). That is the
-safe idle for active-low OLED CS/RES. Outputs can sink strongly but source
-only ~30–300 µA, so CS/DC/RES should have 4.7 kΩ–10 kΩ pull-ups to 3.3 V.
+Quasi-bidirectional: power-on all pins high (weak current source), strong sink.
+CS/DC/RES want 4.7 kΩ–10 kΩ pull-ups to 3.3 V. Footswitches to GND can use the
+weak pull-up plus an extra 10 kΩ.
+
+PCF8575 addresses are 0x20–0x27 from A2/A1/A0. PCF8574 (8-bit) and PCF8574A
+(0x38–0x3F) still construct if you have those instead.
 """
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ from __future__ import annotations
 from typing import Protocol
 
 DEFAULT_ADDRESS = 0x20
-ALL_HIGH = 0xFFFF
+SWITCH_ADDRESS = 0x21
+SWITCH_ADDRESS_8574A = 0x38
+PCF8574_ADDRESSES = frozenset(range(0x20, 0x28)) | frozenset(range(0x38, 0x40))
+PCF8575_ADDRESSES = frozenset(range(0x20, 0x28))
 
 
 class I2CDevice(Protocol):
@@ -23,37 +29,46 @@ class I2CDevice(Protocol):
     def read(self, addr: int, n: int) -> bytes: ...
 
 
-class Pcf8575:
-    """Tracks the 16-bit output latch and writes it as two I2C bytes."""
+def _validate_address(bits: int, address: int) -> None:
+    allowed = PCF8575_ADDRESSES if bits == 16 else PCF8574_ADDRESSES
+    if address not in allowed:
+        kind = "PCF8575" if bits == 16 else "PCF8574/PCF8574A"
+        raise ValueError(f"{kind} address 0x{address:02x} is not valid")
+
+
+class Pcf857x:
+    """Tracks the output latch and writes 1 byte (8574) or 2 bytes (8575)."""
 
     def __init__(
         self,
         i2c: I2CDevice,
         address: int = DEFAULT_ADDRESS,
         *,
+        bits: int = 16,
         init: bool = True,
     ) -> None:
-        if not 0x20 <= address <= 0x27:
-            raise ValueError(
-                f"PCF8575 address must be 0x20-0x27 (A2/A1/A0 straps), got 0x{address:02x}"
-            )
+        if bits not in (8, 16):
+            raise ValueError(f"PCF857x width must be 8 or 16, got {bits}")
+        _validate_address(bits, address)
         self._i2c = i2c
         self.address = address
-        self._latch = ALL_HIGH
+        self.bits = bits
+        self.width_mask = (1 << bits) - 1
+        self._latch = self.width_mask
         if init:
-            self.write_latch(ALL_HIGH)
+            self.write_latch(self.width_mask)
 
     @property
     def latch(self) -> int:
         return self._latch
 
     def write_latch(self, value: int) -> None:
-        value &= 0xFFFF
+        value &= self.width_mask
         self._latch = value
-        self._i2c.write(
-            self.address,
-            bytes((value & 0xFF, (value >> 8) & 0xFF)),
-        )
+        if self.bits == 8:
+            self._i2c.write(self.address, bytes((value & 0xFF,)))
+        else:
+            self._i2c.write(self.address, bytes((value & 0xFF, (value >> 8) & 0xFF)))
 
     def update(self, clear_mask: int = 0, set_mask: int = 0) -> None:
         """Clear bits then set bits in one I2C write (DC/CS change together)."""
@@ -69,16 +84,32 @@ class Pcf8575:
 
     def read_pins(self) -> int:
         """Return live pin levels. Driven-low outputs read 0; floating inputs read 1."""
-        data = self._i2c.read(self.address, 2)
-        if len(data) != 2:
-            raise OSError(f"PCF8575 read returned {len(data)} bytes, expected 2")
-        return data[0] | (data[1] << 8)
+        nbytes = 1 if self.bits == 8 else 2
+        data = self._i2c.read(self.address, nbytes)
+        if len(data) != nbytes:
+            raise OSError(f"PCF857x read returned {len(data)} bytes, expected {nbytes}")
+        value = data[0]
+        if nbytes == 2:
+            value |= data[1] << 8
+        return value
 
     def pin_is_low(self, pin: int) -> bool:
         self._check_pin(pin)
         return (self.read_pins() & (1 << pin)) == 0
 
-    @staticmethod
-    def _check_pin(pin: int) -> None:
-        if not 0 <= pin <= 15:
-            raise ValueError(f"PCF8575 pin must be 0-15, got {pin}")
+    def _check_pin(self, pin: int) -> None:
+        if not 0 <= pin < self.bits:
+            raise ValueError(f"PCF857x pin must be 0-{self.bits - 1}, got {pin}")
+
+
+class Pcf8574(Pcf857x):
+    def __init__(self, i2c: I2CDevice, address: int = DEFAULT_ADDRESS, **kwargs) -> None:
+        super().__init__(i2c, address, bits=8, **kwargs)
+
+
+class Pcf8575(Pcf857x):
+    def __init__(self, i2c: I2CDevice, address: int = DEFAULT_ADDRESS, **kwargs) -> None:
+        super().__init__(i2c, address, bits=16, **kwargs)
+
+
+ALL_HIGH = 0xFFFF

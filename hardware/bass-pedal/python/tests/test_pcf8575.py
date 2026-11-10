@@ -1,7 +1,7 @@
 import unittest
 
 from bass_pedal.buses import FakeI2C, assert_expander_bus
-from bass_pedal.pcf8575 import ALL_HIGH, Pcf8575
+from bass_pedal.pcf8575 import ALL_HIGH, Pcf8574, Pcf8575
 
 
 class Pcf8575Tests(unittest.TestCase):
@@ -14,6 +14,11 @@ class Pcf8575Tests(unittest.TestCase):
     def test_rejects_non_pcf8575_address(self):
         with self.assertRaises(ValueError):
             Pcf8575(FakeI2C(), 0x4D)
+
+    def test_8574_writes_one_byte(self):
+        i2c = FakeI2C()
+        Pcf8574(i2c, 0x20)
+        self.assertEqual(i2c.writes, [(0x20, b"\xff")])
 
     def test_update_is_one_write_clear_then_set(self):
         i2c = FakeI2C()
@@ -29,11 +34,11 @@ class Pcf8575Tests(unittest.TestCase):
 
     def test_read_follows_latch_and_grounded_inputs(self):
         i2c = FakeI2C()
-        chip = Pcf8575(i2c)
-        i2c.ground_pins(1 << 8)
+        chip = Pcf8575(i2c, 0x21)
+        i2c.ground_pins(1 << 0, addr=0x21)
         pins = chip.read_pins()
-        self.assertEqual(pins & (1 << 8), 0)
-        self.assertEqual(chip.latch & (1 << 8), 1 << 8)
+        self.assertEqual(pins & (1 << 0), 0)
+        self.assertEqual(chip.latch & (1 << 0), 1 << 0)
 
     def test_hifiberry_i2c_bus_is_forbidden(self):
         with self.assertRaises(RuntimeError):

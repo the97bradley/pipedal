@@ -16,7 +16,7 @@ import sys
 from .board import BassPedalBoard, PedalConfig, SwitchEvent
 from .buses import FORBIDDEN_I2C_BUSES, available_i2c_buses, detect_expander_bus
 from .oled import OledController
-from .pcf8575 import DEFAULT_ADDRESS
+from .pcf8575 import DEFAULT_ADDRESS, SWITCH_ADDRESS
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -27,7 +27,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--address",
         type=lambda value: int(value, 0),
         default=DEFAULT_ADDRESS,
-        help="PCF8575 address (default 0x20)",
+        help="Display PCF8575 address (default 0x20, A0/A1/A2 low)",
+    )
+    parser.add_argument(
+        "--switch-address",
+        type=lambda value: int(value, 0),
+        default=SWITCH_ADDRESS,
+        help="Switch PCF8575 address (default 0x21, A0 high)",
     )
     parser.add_argument(
         "--controller",
@@ -49,6 +55,7 @@ def scan_buses() -> int:
     try:
         detected = detect_expander_bus()
         print(f"expander bus candidate: /dev/i2c-{detected}")
+        print("expect PCF8575 at 0x20 (OLEDs) and 0x21 (switches)")
     except FileNotFoundError as exc:
         print(exc)
         return 1
@@ -68,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     config = PedalConfig(
         i2c_bus=args.bus,
         i2c_address=args.address,
+        switch_address=args.switch_address,
         controller=OledController(args.controller),
     )
     if args.mock:
@@ -76,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         board = BassPedalBoard.open_hardware(config)
 
-    print("initializing expander (all CS high) then OLEDs…")
+    print("initializing PCF8575s (OLEDs 0x%02x, switches 0x%02x)…" % (
+        config.i2c_address, config.switch_address
+    ))
     board.initialize()
     board.show_labels()
     print("displays initialized.")

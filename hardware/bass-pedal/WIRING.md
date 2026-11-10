@@ -32,16 +32,25 @@ HiFiBerry's GPIO guide: do not draw more than a few mA from the Pi 3.3 V rail. S
 
 If a specific OLED module already has an onboard 3.3 V regulator and is rated for 5 V on `VCC`, you may feed that module `5V` instead of `3V3_OLED`. Confirm the module, not the listing title. SPI `SCK`/`SDA`/`RES`/`DC`/`CS` on many 1.3" panels are **not** 5 V tolerant — keep those nets at 3.3 V.
 
-## PCF8575
+## Two PCF8575s on the dedicated I²C bus
 
-Default I2C address **0x20** with `A0`, `A1`, `A2` all low / jumpers open. Leave the INT pin unconnected (polling, no extra Pi GPIO).
+Both chips share BCM 22 (SDA) and BCM 23 (SCL). Leave INT unconnected (software poll). Strap addresses so they do not collide:
 
-| PCF8575 pin (breakout silk P0–P15) | Net | Notes |
+| Chip | A0 | A1 | A2 | Address | Job |
+|---|---|---|---|---|---|
+| Display PCF8575 | low / open | low | low | **0x20** | OLED CS, DC, RESET |
+| Switch PCF8575 | **high / closed** | low | low | **0x21** | Footswitches |
+
+SDA/SCL still need pull-ups to 3.3 V if the breakouts do not already have them. One pair of 4.7 kΩ–10 kΩ resistors can serve both chips.
+
+### Display PCF8575 @ 0x20
+
+| Pin (silk P0–P15) | Net | Notes |
 |---|---|---|
 | VCC | `3V3_EXP` | 2.5–5.5 V part, run at 3.3 V |
 | GND | `GND` | |
-| SDA | BCM 22 | 10 kΩ pull-up to 3.3 V if the breakout does not already have one |
-| SCL | BCM 23 | same |
+| SDA | BCM 22 | |
+| SCL | BCM 23 | |
 | P0 | `OLED1_CS` | Active low |
 | P1 | `OLED2_CS` | Active low |
 | P2 | `OLED3_CS` | Active low |
@@ -50,22 +59,31 @@ Default I2C address **0x20** with `A0`, `A1`, `A2` all low / jumpers open. Leave
 | P5 | `OLED6_CS` | Active low |
 | P6 | `OLED_DC` | Shared; 0 = command, 1 = data |
 | P7 | `OLED_RES` | Shared; pulse low to reset all six |
-| P8 | `FS1` | Footswitch 1 to GND |
-| P9 | `FS2` | |
-| P10 | `FS3` | |
-| P11 | `FS4` | |
-| P12 | `FS5` | |
-| P13 | `FS6` | |
-| P14 | `FS7` | spare |
-| P15 | `FS8` | spare |
+| P8–P15 | unused | Leave unconnected; software keeps them high |
+
+### Switch PCF8575 @ 0x21
+
+| Pin | Net | Notes |
+|---|---|---|
+| VCC | `3V3_EXP` | |
+| GND | `GND` | |
+| SDA | BCM 22 | shared with display chip |
+| SCL | BCM 23 | shared with display chip |
+| P0 | `FS1` | Effect switch 1 to GND |
+| P1 | `FS2` | |
+| P2 | `FS3` | |
+| P3 | `FS4` | |
+| P4 | `FS5` | |
+| P5 | `FS6` | |
+| P6–P15 | spare | Extra switches if needed |
 
 Adafruit-style silk `P8–P15` is TI `P10–P17` (the second I2C data byte). Cheap boards sometimes label the high nibble `P10–P17`; match the silk to this table before soldering.
 
 ### Pull-ups
 
-The PCF8575 high output is a weak current source (tens to hundreds of µA). Fit **4.7 kΩ–10 kΩ to 3.3 V** on `OLED1_CS`…`OLED6_CS`, `OLED_DC`, and `OLED_RES`. Fit the same on `FS1`…`FS8` (or use the expander's weak pull-up plus 10 kΩ). Footswitches are momentary SPST to ground.
+The PCF8575 high output is a weak current source (tens to hundreds of µA). Fit **4.7 kΩ–10 kΩ to 3.3 V** on `OLED1_CS`…`OLED6_CS`, `OLED_DC`, and `OLED_RES`. Fit the same on `FS1`…`FS6` (or use the expander's weak pull-up plus 10 kΩ). Footswitches are momentary SPST to ground.
 
-Power-on: every expander pin is high, so every CS is inactive. Software still writes `0xFFFF` before any SPI transfer.
+Power-on: every expander pin is high, so every CS is inactive. Software still writes `0xFFFF` to **0x20** before any SPI transfer.
 
 ## OLED modules (each 7-pin SPI)
 

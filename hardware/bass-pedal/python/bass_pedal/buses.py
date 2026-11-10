@@ -15,12 +15,12 @@ PREFERRED_EXPANDER_BUSES = (3, 6, 4, 5, 2)
 
 
 class FakeI2C:
-    """In-memory PCF8575 stand-in for tests and `--mock` bring-up."""
+    """In-memory PCF857x stand-in for tests and `--mock` bring-up."""
 
     def __init__(self) -> None:
         self.memory: dict[int, bytearray] = {}
         self.writes: list[tuple[int, bytes]] = []
-        self.grounded_mask = 0
+        self.grounded: dict[int, int] = {}
 
     def write(self, addr: int, data: bytes) -> None:
         payload = bytes(data)
@@ -30,11 +30,11 @@ class FakeI2C:
     def read(self, addr: int, n: int) -> bytes:
         latched = self.memory.get(addr, bytearray(b"\xff\xff"))
         value = int.from_bytes(latched[:2].ljust(2, b"\xff"), "little")
-        value &= ~self.grounded_mask
+        value &= ~self.grounded.get(addr, 0)
         return value.to_bytes(2, "little")[:n]
 
-    def ground_pins(self, mask: int) -> None:
-        self.grounded_mask = mask & 0xFFFF
+    def ground_pins(self, mask: int, addr: int) -> None:
+        self.grounded[addr] = mask & 0xFFFF
 
 
 class FakeSPI:

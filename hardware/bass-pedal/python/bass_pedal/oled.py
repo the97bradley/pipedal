@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Iterable, Protocol, Sequence
 
 from . import font as bitmap_font
-from .pcf8575 import Pcf8575
+from .pcf8575 import Pcf857x
 
 WIDTH = 128
 HEIGHT = 64
@@ -83,7 +83,7 @@ class OledBus:
 
     def __init__(
         self,
-        expander: Pcf8575,
+        expander: Pcf857x,
         spi: SpiDevice,
         controller: OledController = OledController.SSD1306,
         display_count: int = 6,
@@ -101,18 +101,22 @@ class OledBus:
         self.transfers: list[tuple[str, int, bytes]] = []
         self._idle()
 
+    def _hold_mask(self) -> int:
+        """Keep unused high-byte pins as inputs on a 16-bit display PCF."""
+        return FOOTSWITCH_MASK & self.expander.width_mask
+
     def _idle(self) -> None:
-        # All CS high, DC=data, RES=released, footswitch bits left as inputs (high).
+        # All CS high, DC=data, RES=released. High byte (if any) left as inputs.
         self.expander.update(
             clear_mask=0,
-            set_mask=CS_MASK | DC_MASK | RES_MASK | FOOTSWITCH_MASK,
+            set_mask=CS_MASK | DC_MASK | RES_MASK | self._hold_mask(),
         )
 
     def hardware_reset(self) -> None:
         """Pulse shared RES with every CS held inactive."""
         self.expander.update(
             clear_mask=RES_MASK,
-            set_mask=CS_MASK | FOOTSWITCH_MASK,
+            set_mask=CS_MASK | self._hold_mask(),
         )
         self._sleep(self._reset_seconds)
         self.expander.update(set_mask=RES_MASK | CS_MASK)
@@ -122,7 +126,7 @@ class OledBus:
         if not 0 <= display < self.display_count:
             raise IndexError(f"display {display} out of range")
         cs_low = 1 << CS_PINS[display]
-        set_mask = FOOTSWITCH_MASK | RES_MASK | (CS_MASK & ~cs_low)
+        set_mask = self._hold_mask() | RES_MASK | (CS_MASK & ~cs_low)
         if data_mode:
             set_mask |= DC_MASK
             clear_mask = cs_low
@@ -131,7 +135,7 @@ class OledBus:
         self.expander.update(clear_mask=clear_mask, set_mask=set_mask)
 
     def _end(self) -> None:
-        self.expander.update(set_mask=CS_MASK | FOOTSWITCH_MASK)
+        self.expander.update(set_mask=CS_MASK | self._hold_mask())
 
     def _xfer(self, phase: str, display: int, payload: Sequence[int]) -> None:
         data = bytes(payload)

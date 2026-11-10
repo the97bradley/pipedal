@@ -1,6 +1,6 @@
 # Bass pedal GPIO, OLEDs, and HiFiBerry
 
-Headrush-style floorboard on a Raspberry Pi running PiPedal: **HiFiBerry DAC+ ADC Pro**, **six 7-pin SPI OLEDs**, **PCF8575** for chip-select / DC / reset and footswitches. The expander is on its own I2C bus. It never shares HiFiBerry's I2C1 (BCM 2/3).
+Headrush-style floorboard on a Raspberry Pi running PiPedal: **HiFiBerry DAC+ ADC Pro**, **six 7-pin SPI OLEDs**, and **two PCF8575** expanders on a dedicated I2C bus. The expanders never share HiFiBerry's I2C1 (BCM 2/3).
 
 The driver lives in `python/bass_pedal/` and must run in a process that is **not** the PiPedal audio thread.
 
@@ -13,7 +13,7 @@ Ten distinct BCM signals, matching the handoff:
 | HiFiBerry I2S | 18, 19, 20, 21 | 12, 35, 38, 40 | 4 |
 | HiFiBerry I2C | 2, 3 | 3, 5 | 2 |
 | OLED SPI0 MOSI, SCLK | 10, 11 | 19, 23 | 2 |
-| PCF8575 I2C | 22, 23 | 15, 16 | 2 |
+| Two PCF8575 (I2C) | 22, 23 | 15, 16 | 2 |
 | **Total** | | | **10** |
 
 Power, ground, and HAT ID pins (header 27/28) are extra and must stay reserved.
@@ -31,9 +31,9 @@ Physical hardware was not on this agent host. The pin map is verified against pu
 | BCM 10, 11, 22, 23 | Free for SPI0 and a second I2C. Not in the HiFiBerry map. Do not use the DAC8x overlay — that product **does** take 18–27 including 22/23 | Same GPIO usage page (DAC8x section) |
 | Dedicated I2C | Pi 5: `dtoverlay=i2c3-pi5,pins_22_23`. Pi 4: `dtoverlay=i2c6,pins_22_23`. Bit-bang `i2c-gpio` is the fallback | [raspberrypi/linux overlays README](https://github.com/raspberrypi/linux/blob/rpi-6.12.y/arch/arm/boot/dts/overlays/README) |
 | OLED | 7-pin SPI 128×64. `SDA` means MOSI. 0.96" ≈ SSD1306, 1.3" ≈ SH1106. Logic 3.3 V; `VCC` 3.3–5 V only if that module has a regulator | Module pinout + SH1106/SSD1306 datasheets |
-| PCF8575 | Quasi-bidirectional, address 0x20–0x27 from A2/A1/A0, power-on all pins high, IOH ~30–300 µA | [TI PCF8575](https://www.ti.com/lit/ds/symlink/pcf8575.pdf); [Adafruit pinout](https://learn.adafruit.com/adafruit-pcf8575/pinouts) (default 0x20, 10 kΩ SDA/SCL pull-ups) |
+| PCF8575 ×2 | Quasi-bidirectional, 0x20–0x27 from A2/A1/A0, power-on all pins high, IOH ~30–300 µA. Display chip **0x20** (A0 low), switch chip **0x21** (A0 high) | [TI PCF8575](https://www.ti.com/lit/ds/symlink/pcf8575.pdf); [Adafruit pinout](https://learn.adafruit.com/adafruit-pcf8575/pinouts) |
 
-Still to confirm on the bench: exact Pi SKU, HiFiBerry PCB revision printed on silk, OLED controller (SSD1306 vs SH1106) and whether `VCC` is 3.3 V-only, PCF8575 breakout pull-ups and address jumpers.
+Still to confirm on the bench: exact Pi SKU, HiFiBerry PCB revision printed on silk, OLED controller (SSD1306 vs SH1106) and whether `VCC` is 3.3 V-only, and that the two PCF8575 breakouts have pull-ups and the switch chip's A0 jumper closed.
 
 ## Software chip-select
 
@@ -44,7 +44,7 @@ SPI0 is MOSI+SCLK only. `spidev.no_cs = True`. The PCF8575 drops **one** CS at a
 1. Append [`config/config.txt.snippet`](config/config.txt.snippet) to `/boot/firmware/config.txt`.
 2. Reboot.
 3. `i2cdetect -l` — expect HiFiBerry on **bus 1** and the expander on bus 3 (Pi 5) or 6 (Pi 4).
-4. `sudo i2cdetect -y 3` (or `6`) — expect `0x20` if A0/A1/A2 are low. **Do not scan bus 1.**
+4. `sudo i2cdetect -y 3` (or `6`) — expect `0x20` (OLEDs) and `0x21` (switches). **Do not scan bus 1.**
 5. On the Pi:
 
 ```bash

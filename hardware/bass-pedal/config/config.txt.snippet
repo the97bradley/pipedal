@@ -27,5 +27,5 @@ dtoverlay=i2c3-pi5,pins_22_23,baudrate=100000
 #
 # After reboot:
 #   i2cdetect -l
-#   i2cdetect -y <expander-bus>     # expect 0x20 (default A0/A1/A2 low)
+#   i2cdetect -y <expander-bus>     # expect 0x20 (OLEDs) and 0x21 (switches)
 # Never scan /dev/i2c-1 — that is the HiFiBerry PCM5122/PCM1863 bus.
