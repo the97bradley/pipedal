@@ -790,6 +790,7 @@ add_test(NAME DevTest COMMAND pipedaltest "[Dev]")
 add_executable(pipedalconfig
     PrettyPrinter.hpp
     SetWifiConfig.cpp SetWifiConfig.hpp
+    SetBluetoothConfig.cpp SetBluetoothConfig.hpp
     CommandLineParser.hpp
     PiPedalException.hpp
     ConfigMain.cpp
@@ -876,6 +877,7 @@ add_executable(pipedaladmind AdminMain.cpp CommandLineParser.hpp
     UnixSocket.cpp UnixSocket.hpp
 
     SetWifiConfig.cpp SetWifiConfig.hpp
+    SetBluetoothConfig.cpp SetBluetoothConfig.hpp
     JackServerSettings.hpp JackServerSettings.cpp
     PiPedalAlsa.hpp PiPedalAlsa.cpp
     Lv2SystemdLogger.hpp Lv2SystemdLogger.cpp
@@ -943,6 +945,10 @@ install (TARGETS pipedalconfig pipedal_kconfig pipedal_latency_test DESTINATION 
 install (TARGETS pipedald pipedaladmind pipedal_update DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin
    EXPORT pipedalSbinTargets
    )
+
+install (PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal-bt-nap
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin
+)
 
    
 

@@ -137,6 +137,23 @@ void AdminClient::SetWifiDirectConfig(const WifiDirectConfigSettings &settings)
         throw PiPedalException("Operation failed.");
     }
 }
+void AdminClient::SetBluetoothConfig(const BluetoothConfigSettings &settings)
+{
+    if (!CanUseAdminClient())
+    {
+        throw PiPedalException("Can't perform this operation when debugging.");
+    }
+    std::stringstream cmd;
+    cmd << "BluetoothConfigSettings ";
+    json_writer writer(cmd, true);
+    writer.write(settings);
+    cmd << '\n';
+    bool result = WriteMessage(cmd.str().c_str());
+    if (!result)
+    {
+        throw PiPedalException("Operation failed.");
+    }
+}
 
 void AdminClient::SetGovernorSettings(const std::string &settings)
 {

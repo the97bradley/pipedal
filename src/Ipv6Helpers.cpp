@@ -126,6 +126,16 @@ std::optional<std::string> pipedal::GetWlanIpv4Address()
     return std::optional<std::string>();
 }
 
+std::optional<std::string> pipedal::GetBluetoothNapIpv4Address()
+{
+    auto result = GetInterfaceIpv4Address("pan0");
+    if (result.length() != 0)
+    {
+        return result;
+    }
+    return std::optional<std::string>();
+}
+
 
 static bool IsIpv4OnLocalSubnet(uint32_t ipv4Addres)
 {

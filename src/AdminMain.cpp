@@ -38,7 +38,10 @@
 #include "Lv2Log.hpp"
 #include "Lv2SystemdLogger.hpp"
 #include "WifiConfigSettings.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "SetWifiConfig.hpp"
+#include "SetBluetoothConfig.hpp"
+#include "json.hpp"
 #include "SysExec.hpp"
 #include <filesystem>
 #include <thread>
@@ -351,6 +354,22 @@ private:
                     throw PiPedalArgumentException("Invalid arguments.");
                 }
                 pipedal::SetWifiDirectConfig(settings);
+                result = 0;
+            }
+            else if (command == "BluetoothConfigSettings")
+            {
+                std::stringstream ss(args);
+                BluetoothConfigSettings settings;
+                try
+                {
+                    json_reader reader(ss);
+                    reader.read(&settings);
+                }
+                catch (const std::exception &e)
+                {
+                    throw PiPedalArgumentException("Invalid arguments.");
+                }
+                pipedal::SetBluetoothConfig(settings);
                 result = 0;
             }
             else if (command == "shutdown")

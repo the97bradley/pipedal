@@ -608,6 +608,7 @@ void Storage::Initialize(PiPedalModel* model)
 
     LoadWifiConfigSettings();
     LoadWifiDirectConfigSettings();
+    LoadBluetoothConfigSettings();
     this->channelRouterSettings = LoadChannelRouterSettings();
     LoadUserSettings();
     UpgradeChannelRouterSettings();
@@ -1686,6 +1687,13 @@ void Storage::LoadWifiDirectConfigSettings()
     this->wifiDirectConfigSettings = settings;
 }
 
+void Storage::LoadBluetoothConfigSettings()
+{
+    BluetoothConfigSettings settings;
+    settings.Load();
+    this->bluetoothConfigSettings = settings;
+}
+
 WifiConfigSettings Storage::GetWifiConfigSettings()
 {
     WifiConfigSettings result = this->wifiConfigSettings;
@@ -1696,6 +1704,24 @@ WifiConfigSettings Storage::GetWifiConfigSettings()
 WifiDirectConfigSettings Storage::GetWifiDirectConfigSettings()
 {
     return this->wifiDirectConfigSettings;
+}
+
+void Storage::SetBluetoothConfigSettings(const BluetoothConfigSettings &bluetoothConfigSettings)
+{
+    BluetoothConfigSettings copyToSave = bluetoothConfigSettings;
+    if (copyToSave.deviceName_.empty())
+    {
+        copyToSave.deviceName_ = "pipedal";
+    }
+    copyToSave.Save();
+    copyToSave.valid_ = copyToSave.HasBluetoothAdapter();
+    this->bluetoothConfigSettings = copyToSave;
+}
+
+BluetoothConfigSettings Storage::GetBluetoothConfigSettings()
+{
+    this->bluetoothConfigSettings.valid_ = this->bluetoothConfigSettings.HasBluetoothAdapter();
+    return this->bluetoothConfigSettings;
 }
 
 void Storage::SaveCurrentPreset(const CurrentPreset& currentPreset)

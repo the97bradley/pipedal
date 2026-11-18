@@ -35,6 +35,8 @@
 #include "WriteTemplateFile.hpp"
 #include <fstream>
 #include "SetWifiConfig.hpp"
+#include "SetBluetoothConfig.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "SysExec.hpp"
 #include <sys/wait.h>
 #include <pwd.h>
@@ -579,6 +581,7 @@ void Uninstall()
     try
     {
         OnWifiUninstall(true);
+        OnBluetoothUninstall();
 
         StopService();
         DisableService();
@@ -1294,6 +1297,14 @@ void Install(const fs::path &programPrefix, const std::string endpointAddress)
 
         // Restart Wi-Fi Direct if neccessary.
         OnWifiReinstall();
+        try
+        {
+            OnBluetoothInstall();
+        }
+        catch (const std::exception &e)
+        {
+            cout << "Warning: Bluetooth remote not configured. " << e.what() << endl;
+        }
 
         CheckPreemptDynamicConfig();
     }
@@ -1418,6 +1429,13 @@ static void PrintHelp()
         << "\n\n"
 
         << HangingIndent() << "    --disable-hotspot\tDisabled the Wi-Fi hotspot."
+        << "\n\n"
+        << HangingIndent() << "    --enable-bluetooth\t [device-name]"
+        << "\n\nEnable a Bluetooth network (PAN) so an iPad or phone can stay on Wi-Fi for internet "
+        << "and still open PiPedal at http://172.21.0.1. On the iPad: Settings → Bluetooth → pair the device, "
+        << "then turn on the network/Ethernet control if iPadOS shows one."
+        << "\n\n"
+        << HangingIndent() << "    --disable-bluetooth\tDisable the Bluetooth network."
         << "\n\n"
         << HangingIndent() << "    --alsa-devices\tList available ALSA hw devices."
         << "\n\n"
@@ -1567,6 +1585,7 @@ int main(int argc, char **argv)
     bool stop = false, start = false;
     bool enable = false, disable = false, restart = false;
     bool enable_hotspot = false, disable_hotspot = false;
+    bool enable_bluetooth = false, disable_bluetooth = false;
     bool enable_p2p = false, disable_p2p = false;
     bool list_p2p_channels = false;
     bool get_current_port = false;
@@ -1597,6 +1616,8 @@ int main(int argc, char **argv)
     parser.AddOption("--port", &portOption);
     parser.AddOption("--enable-hotspot", &enable_hotspot);
     parser.AddOption("--disable-hotspot", &disable_hotspot);
+    parser.AddOption("--enable-bluetooth", &enable_bluetooth);
+    parser.AddOption("--disable-bluetooth", &disable_bluetooth);
     parser.AddOption("--home-network", &homeNetwork);
     parser.AddOption("--no-ethernet", &noEthernet);
     parser.AddOption("--no-wifi", &noWifi);
@@ -1611,7 +1632,7 @@ int main(int argc, char **argv)
         int actionCount =
             (!alsaDevice.empty()) + alsaDevices + help + get_current_port + install +
             uninstall + stop + start + enable + disable + enable_hotspot +
-            disable_hotspot + restart + enable_p2p + disable_p2p + list_p2p_channels +
+            disable_hotspot + enable_bluetooth + disable_bluetooth + restart + enable_p2p + disable_p2p + list_p2p_channels +
             fix_permissions + list_wifi_country_codes;
 
         if (actionCount == 0 && portOption.length() != 0)
@@ -1884,6 +1905,31 @@ int main(int argc, char **argv)
             {
                 throw std::runtime_error("Failed to restart the " PIPEDALD_SERVICE " service.");
             }
+            FileSystemSync();
+        }
+        else if (enable_bluetooth)
+        {
+            BluetoothConfigSettings settings;
+            settings.Load();
+            settings.enable_ = true;
+            auto argv = parser.Arguments();
+            if (argv.size() > 1)
+            {
+                throw std::runtime_error("Too many arguments. Usage: pipedalconfig --enable-bluetooth [device-name]");
+            }
+            if (argv.size() == 1)
+            {
+                settings.deviceName_ = argv[0];
+            }
+            SetBluetoothConfig(settings);
+            FileSystemSync();
+        }
+        else if (disable_bluetooth)
+        {
+            BluetoothConfigSettings settings;
+            settings.Load();
+            settings.enable_ = false;
+            SetBluetoothConfig(settings);
             FileSystemSync();
         }
     }

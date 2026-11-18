@@ -44,6 +44,7 @@ namespace pipedal {
 
     std::optional<std::string> GetWlanInterfaceName();
     std::optional<std::string> GetWlanIpv4Address();
+    std::optional<std::string> GetBluetoothNapIpv4Address();
 
     std::vector<std::string> GetEthernetIpv4Addresses();
 

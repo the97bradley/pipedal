@@ -159,6 +159,34 @@ Typically, when you're away from home, there's no easy way to connect to your Ra
 correct the problem. So you should carefully test that your auto-hotspot configuration works as expected before you adventure
 away from home with PiPedal.
 
+## Bluetooth remote (iPad stays on internet Wi-Fi)
+
+Connecting an iPad to PiPedal's Wi-Fi hotspot takes the iPad off the internet, because iPadOS can only join one Wi-Fi network
+at a time. Bluetooth remote access is a second, separate network so the iPad can stay on venue or home Wi-Fi (or cellular)
+for internet, and still open the PiPedal web UI over Bluetooth.
+
+Enable it from **Settings → Bluetooth remote**, or from the command line:
+
+    sudo pipedalconfig --enable-bluetooth
+
+The Pi advertises a Bluetooth NAP named `pipedal` (you can change the name). It has a fixed address of **http://172.21.0.1**.
+DHCP on that link does **not** hand out a default route, so the iPad keeps using Wi-Fi for internet.
+
+### How the iPad connects
+
+1. Leave the iPad on your internet Wi-Fi (or cellular).
+2. Open **Settings → Bluetooth** and wait for **pipedal** (or the name you chose) to appear.
+3. Tap it to pair. Tap **Pair** if iPadOS asks.
+4. When it shows **Connected**, tap the **ⓘ** next to the name. If iPadOS offers a network / Internet / Ethernet control, turn it on.
+   An **Ethernet** item may also appear in the main Settings list. Leave it on Automatic (DHCP).
+5. Open Safari and go to **http://172.21.0.1**. If mDNS works on the PAN, **http://pipedal.local** also works.
+
+Pairing is only needed once. After that the iPad should reconnect when both devices are on. Bluetooth is for the web UI only,
+not for audio. It is slower than Wi-Fi, which is fine for knobs and presets.
+
+If the PAN does not come up, forget the device on the iPad and pair again. On the Pi, `systemctl status pipedal-bt-nap`
+shows whether the Bluetooth network service is running.
+
 ### Connecting to PiPedal Using a Laptop when you are Away From Home
 
 If your laptop has Wi-Fi support, you can use a laptop to connect to Raspberry Pi when you are away from home. 

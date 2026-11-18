@@ -1495,4 +1495,9 @@ void WebServerImpl::DisplayIpAddresses()
             Lv2Log::info(SS("Listening on Wi-Fi address " << *wifiAddress << ":" << this->port));
         }
     }
+    auto bluetoothAddress = GetBluetoothNapIpv4Address();
+    if (bluetoothAddress)
+    {
+        Lv2Log::info(SS("Listening on Bluetooth PAN address " << *bluetoothAddress << ":" << this->port));
+    }
 }

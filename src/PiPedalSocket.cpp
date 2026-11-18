@@ -41,6 +41,7 @@
 #include "AdminClient.hpp"
 #include "WifiConfigSettings.hpp"
 #include "WifiDirectConfigSettings.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "WifiChannelSelectors.hpp"
 #include "SysExec.hpp"
 #include "PiPedalAlsa.hpp"
@@ -1418,6 +1419,25 @@ public:
     }
     REGISTER_MESSAGE_HANDLER(getWifiConfigSettings)
 
+    void handle_setBluetoothConfigSettings(int replyTo, json_reader *pReader)
+    {
+        BluetoothConfigSettings bluetoothConfigSettings;
+        pReader->read(&bluetoothConfigSettings);
+        if (!GetAdminClient().CanUseAdminClient())
+        {
+            throw PiPedalException("Can't change server settings when running interactively.");
+        }
+        this->model.SetBluetoothConfigSettings(bluetoothConfigSettings);
+        this->Reply(replyTo, "setBluetoothConfigSettings");
+    }
+    REGISTER_MESSAGE_HANDLER(setBluetoothConfigSettings)
+
+    void handle_getBluetoothConfigSettings(int replyTo, json_reader *pReader)
+    {
+        this->Reply(replyTo, "getBluetoothConfigSettings", model.GetBluetoothConfigSettings());
+    }
+    REGISTER_MESSAGE_HANDLER(getBluetoothConfigSettings)
+
     void handle_setWifiDirectConfigSettings(int replyTo, json_reader *pReader)
     {
         WifiDirectConfigSettings wifiDirectConfigSettings;
@@ -2655,6 +2675,10 @@ private:
     virtual void OnWifiDirectConfigSettingsChanged(const WifiDirectConfigSettings &wifiConfigSettings)
     {
         Send("onWifiDirectConfigSettingsChanged", wifiConfigSettings);
+    }
+    virtual void OnBluetoothConfigSettingsChanged(const BluetoothConfigSettings &bluetoothConfigSettings)
+    {
+        Send("onBluetoothConfigSettingsChanged", bluetoothConfigSettings);
     }
     virtual void OnGovernorSettingsChanged(const std::string &governor)
     {

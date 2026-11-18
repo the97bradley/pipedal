@@ -34,6 +34,7 @@
 #include "PiPedalConfiguration.hpp"
 #include "JackServerSettings.hpp"
 #include "WifiConfigSettings.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "WifiDirectConfigSettings.hpp"
 #include "AdminClient.hpp"
 #include <thread>
@@ -87,6 +88,7 @@ namespace pipedal
         virtual void OnNotifyPatchProperty(int64_t clientModel, uint64_t instanceId, const std::string &propertyUri, const std::string &atomJson) = 0;
         virtual void OnWifiConfigSettingsChanged(const WifiConfigSettings &wifiConfigSettings) = 0;
         virtual void OnWifiDirectConfigSettingsChanged(const WifiDirectConfigSettings &wifiDirectConfigSettings) = 0;
+        virtual void OnBluetoothConfigSettingsChanged(const BluetoothConfigSettings &bluetoothConfigSettings) = 0;
         virtual void OnGovernorSettingsChanged(const std::string &governor) = 0;
         virtual void OnFavoritesChanged(const std::map<std::string, bool> &favorites) = 0;
         virtual void OnShowStatusMonitorChanged(bool show) = 0;
@@ -450,6 +452,9 @@ namespace pipedal
 
         void SetWifiDirectConfigSettings(const WifiDirectConfigSettings &wifiConfigSettings);
         WifiDirectConfigSettings GetWifiDirectConfigSettings();
+
+        void SetBluetoothConfigSettings(const BluetoothConfigSettings &bluetoothConfigSettings);
+        BluetoothConfigSettings GetBluetoothConfigSettings();
 
         void SetGovernorSettings(const std::string &governor);
         GovernorSettings GetGovernorSettings();

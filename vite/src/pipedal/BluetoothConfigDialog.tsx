@@ -1,0 +1,160 @@
+// Copyright (c) Robin E.R. Davies
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import DialogEx from './DialogEx';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Typography from '@mui/material/Typography';
+import ResizeResponsiveComponent from './ResizeResponsiveComponent';
+import BluetoothConfigSettings from './BluetoothConfigSettings';
+
+export interface BluetoothConfigProps {
+    open: boolean,
+    bluetoothConfigSettings: BluetoothConfigSettings,
+    onOk: (bluetoothConfigSettings: BluetoothConfigSettings) => void,
+    onClose: () => void
+}
+
+export interface BluetoothConfigState {
+    enabled: boolean;
+    name: string;
+    nameError: boolean;
+    nameErrorMessage: string;
+}
+
+const BluetoothConfigDialog =
+    class extends ResizeResponsiveComponent<BluetoothConfigProps, BluetoothConfigState> {
+
+        constructor(props: BluetoothConfigProps) {
+            super(props);
+            this.state = {
+                enabled: this.props.bluetoothConfigSettings.enable,
+                name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
+                nameError: false,
+                nameErrorMessage: ""
+            };
+        }
+
+        componentDidUpdate(prevProps: BluetoothConfigProps) {
+            if (this.props.open && !prevProps.open) {
+                this.setState({
+                    enabled: this.props.bluetoothConfigSettings.enable,
+                    name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
+                    nameError: false,
+                    nameErrorMessage: ""
+                });
+            }
+        }
+
+        handleOk() {
+            let name = (this.state.name || "").trim();
+            if (this.state.enabled) {
+                if (name.length === 0) {
+                    this.setState({ nameError: true, nameErrorMessage: "* Required" });
+                    return;
+                }
+                if (name.length > 32) {
+                    this.setState({ nameError: true, nameErrorMessage: "Longer than 32 characters" });
+                    return;
+                }
+                if (!/^[A-Za-z0-9 _-]+$/.test(name)) {
+                    this.setState({ nameError: true, nameErrorMessage: "Use letters, numbers, space, - or _" });
+                    return;
+                }
+            }
+            let settings = new BluetoothConfigSettings();
+            settings.valid = true;
+            settings.enable = this.state.enabled;
+            settings.deviceName = name.length ? name : "pipedal";
+            this.props.onOk(settings);
+        }
+
+        render() {
+            return (
+                <DialogEx
+                    tag="bluetoothConfig"
+                    open={this.props.open}
+                    onClose={() => this.props.onClose()}
+                    fullWidth
+                    maxWidth="sm"
+                    onEnterKey={() => { this.handleOk(); }}
+                >
+                    <DialogTitle>Bluetooth remote</DialogTitle>
+                    <DialogContent>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={this.state.enabled}
+                                    onChange={(e) => this.setState({ enabled: e.target.checked })}
+                                />
+                            }
+                            label="Enable Bluetooth connection"
+                        />
+                        <TextField
+                            autoComplete="off"
+                            id="bt_device_name"
+                            margin="dense"
+                            label="Bluetooth name"
+                            fullWidth
+                            value={this.state.name}
+                            error={this.state.nameError}
+                            helperText={this.state.nameError ? this.state.nameErrorMessage : "Shown in iPad Settings → Bluetooth"}
+                            onChange={(e) => this.setState({ name: e.target.value, nameError: false, nameErrorMessage: "" })}
+                            disabled={!this.state.enabled}
+                        />
+                        <Typography variant="body2" color="textSecondary" style={{ marginTop: 16, lineHeight: "1.45em" }}>
+                            Bluetooth is a second network next to Wi-Fi. The iPad can stay on venue/home Wi-Fi
+                            (or cellular) for internet, and still open PiPedal over Bluetooth.
+                        </Typography>
+                        <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
+                        <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
+                            <ol style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0 }}>
+                                <li>On the iPad open <b>Settings → Bluetooth</b> and leave Wi-Fi on your internet network.</li>
+                                <li>Wait for <b>{this.state.name || "pipedal"}</b> to appear, then tap it to pair. Tap Pair if asked.</li>
+                                <li>When it says Connected, tap the <b>ⓘ</b> next to the name. If iPadOS shows a network /
+                                    Internet / Ethernet control, turn it on. An <b>Ethernet</b> item may also appear in the
+                                    main Settings list — leave it on Automatic (DHCP).</li>
+                                <li>In Safari open <b>http://172.21.0.1</b>. If mDNS works on the PAN, <b>http://pipedal.local</b> also works.</li>
+                            </ol>
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary" style={{ marginTop: 12, lineHeight: "1.45em" }}>
+                            Pairing is only needed once. After that the iPad should reconnect when both devices are on.
+                            Bluetooth is for the web UI only (not audio). If the PAN does not come up, forget the device
+                            on the iPad and pair again.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => this.props.onClose()} color="secondary">
+                            Cancel
+                        </Button>
+                        <Button onClick={() => this.handleOk()} color="secondary" disabled={!this.props.bluetoothConfigSettings.valid && !this.state.enabled}>
+                            OK
+                        </Button>
+                    </DialogActions>
+                </DialogEx>
+            );
+        }
+    };
+
+export default BluetoothConfigDialog;

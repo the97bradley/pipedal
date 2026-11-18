@@ -1,0 +1,15 @@
+[Unit]
+Description=${DESCRIPTION}
+After=bluetooth.service network.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=${COMMAND}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

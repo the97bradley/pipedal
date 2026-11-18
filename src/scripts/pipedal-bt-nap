@@ -1,0 +1,183 @@
+#!/bin/bash
+# PiPedal Bluetooth NAP (Network Access Point).
+#
+# Gives the iPad a second, Bluetooth-only IP path to the Pi so the iPad can
+# stay on Wi-Fi (or cellular) for internet. DHCP does not advertise a default
+# route; the PAN is 172.21.0.0/24 with the Pi at 172.21.0.1.
+
+set -u
+
+CONFIG_JSON="/var/pipedal/config/bluetoothConfig.json"
+BRIDGE="pan0"
+ADDR="172.21.0.1"
+PREFIX="24"
+DHCP_START="172.21.0.10"
+DHCP_END="172.21.0.50"
+RUN_DIR="/run/pipedal"
+DNSMASQ_CONF="${RUN_DIR}/bt-dnsmasq.conf"
+DNSMASQ_LEASES="${RUN_DIR}/bt-dnsmasq.leases"
+AGENT_PID=""
+TRUST_PID=""
+DNSMASQ_PID=""
+BTCTL_PID=""
+
+log() {
+    echo "pipedal-bt-nap: $*" >&2
+}
+
+device_name() {
+    local name=""
+    if [[ -f "$CONFIG_JSON" ]]; then
+        name="$(python3 - <<'PY' 2>/dev/null
+import json,sys
+try:
+    with open("/var/pipedal/config/bluetoothConfig.json") as f:
+        data=json.load(f)
+    print((data.get("deviceName") or "pipedal").strip() or "pipedal")
+except Exception:
+    print("pipedal")
+PY
+)"
+    fi
+    if [[ -z "$name" ]]; then
+        name="pipedal"
+    fi
+    printf '%s' "$name"
+}
+
+cleanup() {
+    if [[ -n "${DNSMASQ_PID}" ]]; then
+        kill "${DNSMASQ_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${AGENT_PID}" ]]; then
+        kill "${AGENT_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${TRUST_PID}" ]]; then
+        kill "${TRUST_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${BTCTL_PID}" ]]; then
+        kill "${BTCTL_PID}" >/dev/null 2>&1 || true
+    fi
+    for adapter in /org/bluez/hci0 /org/bluez/hci1; do
+        dbus-send --system --dest=org.bluez --type=method_call \
+            "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
+            >/dev/null 2>&1 || true
+    done
+    ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
+    ip link set "$BRIDGE" down >/dev/null 2>&1 || true
+    ip link delete "$BRIDGE" type bridge >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+if [[ ! -d /sys/class/bluetooth ]] || [[ -z "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]]; then
+    log "no Bluetooth adapter found"
+    exit 1
+fi
+
+if ! command -v bluetoothctl >/dev/null 2>&1; then
+    log "bluetoothctl not found (install bluez)"
+    exit 1
+fi
+if ! command -v dnsmasq >/dev/null 2>&1; then
+    log "dnsmasq not found"
+    exit 1
+fi
+
+NAME="$(device_name)"
+log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX})"
+
+systemctl start bluetooth >/dev/null 2>&1 || true
+
+for _ in $(seq 1 40); do
+    if bluetoothctl show >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.25
+done
+if ! bluetoothctl show >/dev/null 2>&1; then
+    log "Bluetooth adapter did not become ready"
+    exit 1
+fi
+
+bluetoothctl power on >/dev/null 2>&1 || true
+bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
+bluetoothctl pairable on >/dev/null 2>&1 || true
+bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
+bluetoothctl discoverable on >/dev/null 2>&1 || true
+
+if command -v btmgmt >/dev/null 2>&1; then
+    # Computer + Networking, so iPadOS is more likely to offer an Ethernet/PAN toggle.
+    btmgmt connectable on >/dev/null 2>&1 || true
+    btmgmt discov on >/dev/null 2>&1 || true
+    btmgmt pairable on >/dev/null 2>&1 || true
+    btmgmt bredr on >/dev/null 2>&1 || true
+    btmgmt name "$NAME" >/dev/null 2>&1 || true
+fi
+
+ip link add name "$BRIDGE" type bridge 2>/dev/null || true
+ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
+ip addr add "${ADDR}/${PREFIX}" dev "$BRIDGE"
+ip link set "$BRIDGE" up
+ip link set "$BRIDGE" multicast on
+
+registered=""
+for adapter in /org/bluez/hci0 /org/bluez/hci1; do
+    dbus-send --system --dest=org.bluez --type=method_call \
+        "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
+        >/dev/null 2>&1 || true
+    if dbus-send --system --dest=org.bluez --print-reply --type=method_call \
+        "$adapter" org.bluez.NetworkServer1.Register string:nap string:"$BRIDGE" \
+        >/dev/null 2>&1; then
+        registered="$adapter"
+        break
+    fi
+done
+if [[ -z "$registered" ]]; then
+    log "failed to register BlueZ NAP on pan0"
+    exit 1
+fi
+log "registered NAP on ${registered}"
+
+# Pairing agent: prefer bt-agent (bluez-tools); otherwise keep bluetoothctl open.
+if command -v bt-agent >/dev/null 2>&1; then
+    bt-agent -c NoInputNoOutput >/dev/null 2>&1 &
+    AGENT_PID=$!
+else
+    # Keep stdin open so default-agent stays registered.
+    coproc BTCTL { bluetoothctl --agent NoInputNoOutput; }
+    BTCTL_PID="${BTCTL_PID:-}"
+    if [[ -n "${BTCTL[1]:-}" ]]; then
+        printf 'power on\nsystem-alias %s\npairable on\ndiscoverable on\ndefault-agent\n' "$NAME" >&"${BTCTL[1]}"
+    fi
+fi
+
+# Auto-trust anything that successfully pairs so the iPad can reconnect later.
+(
+    while true; do
+        bluetoothctl devices Paired 2>/dev/null | awk '{print $2}' | while read -r mac; do
+            [[ -n "$mac" ]] && bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+        done
+        sleep 8
+    done
+) &
+TRUST_PID=$!
+
+mkdir -p "$RUN_DIR"
+cat > "$DNSMASQ_CONF" <<EOF
+# Isolated PAN: no default route, so the iPad keeps using Wi-Fi for internet.
+interface=${BRIDGE}
+except-interface=lo
+bind-interfaces
+port=0
+dhcp-range=${DHCP_START},${DHCP_END},255.255.255.0,12h
+dhcp-option=option:router
+log-dhcp
+EOF
+
+dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
+DNSMASQ_PID=$!
+
+log "ready. iPad: Settings > Bluetooth > pair '${NAME}', then open http://${ADDR} (Wi-Fi can stay on internet)."
+
+wait "$DNSMASQ_PID"
+exit $?

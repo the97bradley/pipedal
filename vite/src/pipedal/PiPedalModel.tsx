@@ -38,6 +38,7 @@ import MidiBinding from './MidiBinding';
 import { PluginUiPresets } from './PluginPreset';
 import WifiConfigSettings from './WifiConfigSettings';
 import WifiDirectConfigSettings from './WifiDirectConfigSettings';
+import BluetoothConfigSettings from './BluetoothConfigSettings';
 import GovernorSettings from './GovernorSettings';
 import WifiChannel from './WifiChannel';
 import AlsaDeviceInfo from './AlsaDeviceInfo';
@@ -589,6 +590,7 @@ export class PiPedalModel //implements PiPedalModel
 
     wifiConfigSettings: ObservableProperty<WifiConfigSettings> = new ObservableProperty<WifiConfigSettings>(new WifiConfigSettings());
     wifiDirectConfigSettings: ObservableProperty<WifiDirectConfigSettings> = new ObservableProperty<WifiDirectConfigSettings>(new WifiDirectConfigSettings());
+    bluetoothConfigSettings: ObservableProperty<BluetoothConfigSettings> = new ObservableProperty<BluetoothConfigSettings>(new BluetoothConfigSettings());
     governorSettings: ObservableProperty<GovernorSettings> = new ObservableProperty<GovernorSettings>(new GovernorSettings());
 
     favorites: ObservableProperty<FavoritesList> = new ObservableProperty<FavoritesList>({});
@@ -1001,6 +1003,9 @@ export class PiPedalModel //implements PiPedalModel
         } else if (message === "onWifiDirectConfigSettingsChanged") {
             let wifiDirectConfigSettings = new WifiDirectConfigSettings().deserialize(body);
             this.wifiDirectConfigSettings.set(wifiDirectConfigSettings);
+        } else if (message === "onBluetoothConfigSettingsChanged") {
+            let bluetoothConfigSettings = new BluetoothConfigSettings().deserialize(body);
+            this.bluetoothConfigSettings.set(bluetoothConfigSettings);
         }
         else if (message === "onGovernorSettingsChanged") {
             let governor = body as string;
@@ -1497,6 +1502,10 @@ export class PiPedalModel //implements PiPedalModel
             this.wifiDirectConfigSettings.set(
                 new WifiDirectConfigSettings().deserialize(
                     await this.getWebSocket().request<any>("getWifiDirectConfigSettings")
+                ));
+            this.bluetoothConfigSettings.set(
+                new BluetoothConfigSettings().deserialize(
+                    await this.getWebSocket().request<any>("getBluetoothConfigSettings")
                 ));
             this.governorSettings.set(new GovernorSettings().deserialize(
                 await this.getWebSocket().request<any>("getGovernorSettings")
@@ -3430,6 +3439,29 @@ export class PiPedalModel //implements PiPedalModel
         });
         this.expectDisconnect(ReconnectReason.LoadingSettings);
         // this.webSocket?.reconnect(); // avoid races by letting the server do it for us.
+        return result;
+    }
+
+    setBluetoothConfigSettings(bluetoothConfigSettings: BluetoothConfigSettings): Promise<void> {
+        let result = new Promise<void>((resolve, reject) => {
+            bluetoothConfigSettings = bluetoothConfigSettings.clone();
+            this.bluetoothConfigSettings.set(bluetoothConfigSettings);
+            let ws = this.webSocket;
+            if (!ws) {
+                reject("Not connected.");
+                return;
+            }
+            ws.request<void>(
+                "setBluetoothConfigSettings",
+                bluetoothConfigSettings
+            )
+                .then(() => {
+                    resolve();
+                })
+                .catch((err) => {
+                    reject(err);
+                });
+        });
         return result;
     }
 

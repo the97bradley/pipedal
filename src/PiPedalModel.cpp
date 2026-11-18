@@ -1595,6 +1595,27 @@ WifiDirectConfigSettings PiPedalModel::GetWifiDirectConfigSettings()
     return this->storage.GetWifiDirectConfigSettings();
 }
 
+void PiPedalModel::SetBluetoothConfigSettings(const BluetoothConfigSettings &bluetoothConfigSettings)
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+
+    this->storage.SetBluetoothConfigSettings(bluetoothConfigSettings);
+    adminClient.SetBluetoothConfig(bluetoothConfigSettings);
+
+    BluetoothConfigSettings stored = storage.GetBluetoothConfigSettings();
+    std::vector<IPiPedalModelSubscriber::ptr> t{subscribers.begin(), subscribers.end()};
+    for (auto &subscriber : t)
+    {
+        subscriber->OnBluetoothConfigSettingsChanged(stored);
+    }
+}
+
+BluetoothConfigSettings PiPedalModel::GetBluetoothConfigSettings()
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    return this->storage.GetBluetoothConfigSettings();
+}
+
 void PiPedalModel::SetShowStatusMonitor(bool show)
 {
     {

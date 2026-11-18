@@ -23,6 +23,7 @@
 #include "JackServerSettings.hpp"
 #include "WifiConfigSettings.hpp"
 #include "WifiDirectConfigSettings.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "UnixSocket.hpp"
 #include <mutex>
 
@@ -39,6 +40,7 @@ public:
     bool SetJackServerConfiguration(const JackServerSettings & jackServerSettings);
     void SetWifiConfig(const WifiConfigSettings & settings);
     void SetWifiDirectConfig(const WifiDirectConfigSettings & settings);
+    void SetBluetoothConfig(const BluetoothConfigSettings & settings);
     void SetGovernorSettings(const std::string & governor);
     void MonitorGovernor(const std::string &governor);
     void UnmonitorGovernor();

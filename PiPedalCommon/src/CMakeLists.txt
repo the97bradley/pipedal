@@ -78,6 +78,7 @@ add_library(PiPedalCommon STATIC
   WifiRegulations.cpp include/WifiRegulations.hpp
   WifiDirectConfigSettings.cpp include/WifiDirectConfigSettings.hpp
   WifiConfigSettings.cpp include/WifiConfigSettings.hpp
+  BluetoothConfigSettings.cpp include/BluetoothConfigSettings.hpp
   ServiceConfiguration.cpp include/ServiceConfiguration.hpp
   WriteTemplateFile.cpp include/WriteTemplateFile.hpp
   #NetLinkChannelInfo.cpp include/NetLinkChannelInfo.hpp

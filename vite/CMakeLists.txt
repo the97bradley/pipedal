@@ -161,6 +161,8 @@ add_custom_command(
     src/pipedal/StringBuilder.tsx
     src/pipedal/LoopDialog.tsx
     src/pipedal/WifiConfigSettings.tsx
+    src/pipedal/BluetoothConfigSettings.tsx
+    src/pipedal/BluetoothConfigDialog.tsx
     src/pipedal/XxxSnippet.tsx
     src/pipedal/SnapshotPropertiesDialog.tsx
     src/pipedal/WifiChannel.tsx

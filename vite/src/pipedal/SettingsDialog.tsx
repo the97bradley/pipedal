@@ -44,8 +44,10 @@ import AudioDeviceDialog from './AudioDeviceDialog';
 import JackHostStatus from './JackHostStatus';
 import WifiConfigSettings from './WifiConfigSettings';
 import WifiDirectConfigSettings from './WifiDirectConfigSettings';
+import BluetoothConfigSettings from './BluetoothConfigSettings';
 import WifiConfigDialog from './WifiConfigDialog';
 import WifiDirectConfigDialog from './WifiDirectConfigDialog';
+import BluetoothConfigDialog from './BluetoothConfigDialog';
 import DialogEx from './DialogEx'
 import GovernorSettings from './GovernorSettings';
 import SystemMidiBindingsDialog from './SystemMidiBindingsDialog';
@@ -90,10 +92,12 @@ interface SettingsDialogState {
 
     wifiConfigSettings: WifiConfigSettings;
     wifiDirectConfigSettings: WifiDirectConfigSettings;
+    bluetoothConfigSettings: BluetoothConfigSettings;
 
     showWindowScaleDialog: boolean;
     showWifiConfigDialog: boolean;
     showWifiDirectConfigDialog: boolean;
+    showBluetoothConfigDialog: boolean;
     showGovernorSettingsDialog: boolean;
     showInputSelectDialog: boolean;
     showOutputSelectDialog: boolean;
@@ -201,6 +205,7 @@ const SettingsDialog = withStyles(
                 alsaSequencerConfiguration: this.model.alsaSequencerConfiguration.get(),
                 wifiConfigSettings: this.model.wifiConfigSettings.get(),
                 wifiDirectConfigSettings: this.model.wifiDirectConfigSettings.get(),
+                bluetoothConfigSettings: this.model.bluetoothConfigSettings.get(),
                 governorSettings: this.model.governorSettings.get(),
                 continueDisabled: true,
                 keepScreenOn: this.model.keepScreenOn.get(),
@@ -208,6 +213,7 @@ const SettingsDialog = withStyles(
                 showWindowScaleDialog: false,
                 showWifiConfigDialog: false,
                 showWifiDirectConfigDialog: false,
+                showBluetoothConfigDialog: false,
                 showGovernorSettingsDialog: false,
                 showInputSelectDialog: false,
                 showOutputSelectDialog: false,
@@ -231,6 +237,7 @@ const SettingsDialog = withStyles(
             this.handleChannelRouterSettingsChanged = this.handleChannelRouterSettingsChanged.bind(this);
             this.handleWifiConfigSettingsChanged = this.handleWifiConfigSettingsChanged.bind(this);
             this.handleWifiDirectConfigSettingsChanged = this.handleWifiDirectConfigSettingsChanged.bind(this);
+            this.handleBluetoothConfigSettingsChanged = this.handleBluetoothConfigSettingsChanged.bind(this);
             this.handleGovernorSettingsChanged = this.handleGovernorSettingsChanged.bind(this);
             this.handleConnectionStateChanged = this.handleConnectionStateChanged.bind(this);
             this.handleShowStatusMonitorChanged = this.handleShowStatusMonitorChanged.bind(this);
@@ -286,6 +293,17 @@ const SettingsDialog = withStyles(
                 });
         }
 
+        handleApplyBluetoothConfig(bluetoothConfigSettings: BluetoothConfigSettings): void {
+            this.setState({ showBluetoothConfigDialog: false });
+            this.model.setBluetoothConfigSettings(bluetoothConfigSettings)
+                .then(() => {
+
+                })
+                .catch((err) => {
+                    this.model.showAlert(err);
+                });
+        }
+
         handleApplyGovernorSettings(governor: string): void {
             this.model.setGovernorSettings(governor)
                 .then(() => {
@@ -300,6 +318,13 @@ const SettingsDialog = withStyles(
             this.setState(
                 {
                     wifiConfigSettings: this.model.wifiConfigSettings.get()
+                }
+            )
+        }
+        handleBluetoothConfigSettingsChanged(): void {
+            this.setState(
+                {
+                    bluetoothConfigSettings: this.model.bluetoothConfigSettings.get()
                 }
             )
         }
@@ -381,6 +406,7 @@ const SettingsDialog = withStyles(
                     this.model.channelRouterSettings.addOnChangedHandler(this.handleChannelRouterSettingsChanged);
                     this.model.wifiConfigSettings.addOnChangedHandler(this.handleWifiConfigSettingsChanged);
                     this.model.wifiDirectConfigSettings.addOnChangedHandler(this.handleWifiDirectConfigSettingsChanged);
+                    this.model.bluetoothConfigSettings.addOnChangedHandler(this.handleBluetoothConfigSettingsChanged);
                     this.model.governorSettings.addOnChangedHandler(this.handleGovernorSettingsChanged);
                     this.model.getJackStatus()
                         .then((jackStatus) =>
@@ -404,6 +430,7 @@ const SettingsDialog = withStyles(
                     this.handleChannelRouterSettingsChanged();
                     this.handleWifiConfigSettingsChanged();
                     this.handleWifiDirectConfigSettingsChanged();
+                    this.handleBluetoothConfigSettingsChanged();
                     this.setState({ hasWifiDevice: this.model.hasWifiDevice.get() });
 
                     this.timerHandle = setInterval(() => this.tick(), 1000);
@@ -423,6 +450,7 @@ const SettingsDialog = withStyles(
                     this.model.channelRouterSettings.removeOnChangedHandler(this.handleChannelRouterSettingsChanged);
                     this.model.wifiConfigSettings.removeOnChangedHandler(this.handleWifiConfigSettingsChanged);
                     this.model.wifiDirectConfigSettings.removeOnChangedHandler(this.handleWifiDirectConfigSettingsChanged);
+                    this.model.bluetoothConfigSettings.removeOnChangedHandler(this.handleBluetoothConfigSettingsChanged);
                     this.model.governorSettings.removeOnChangedHandler(this.handleGovernorSettingsChanged);
                     this.model.hasWifiDevice.removeOnChangedHandler(this.handleHasWifiChanged);
                 }
@@ -655,8 +683,9 @@ const SettingsDialog = withStyles(
                                     (
                                         <div>
                                             <Typography display="block" variant="body1" color="textSecondary" style={{ paddingLeft: 24, paddingBottom: 8 }}>
-                                                Select and configure an audio device. You may optionally configure MIDI inputs, and configure a Wi-Fi Auto-Hotspot as well.
-                                                The Auto-Hotspot feature allows you to connect to Pipedal even if you don't have access to a Wi-Fi router.
+                                                Select and configure an audio device. You may optionally configure MIDI inputs, a Wi-Fi Auto-Hotspot, and a Bluetooth remote.
+                                                Bluetooth lets an iPad stay on Wi-Fi for internet while controlling PiPedal. The Auto-Hotspot feature allows you to connect
+                                                even if you don't have access to a Wi-Fi router.
                                             </Typography>
                                             <Typography display="block" variant="body1" color="textSecondary" style={{ paddingLeft: 24, paddingBottom: 8 }}>
                                                 Access and modify these settings later by selecting the <i>Settings</i> menu item on the main menu.
@@ -919,7 +948,7 @@ const SettingsDialog = withStyles(
                                 )
                             }
 
-                            {(this.state.hasWifiDevice || this.state.isAndroidHosted) &&
+                            {(this.state.hasWifiDevice || this.state.isAndroidHosted || this.state.bluetoothConfigSettings.valid) &&
                                 (
                                     <div>
                                         <Divider />
@@ -942,6 +971,19 @@ const SettingsDialog = withStyles(
                                                 </ButtonBase>
 
                                             )}
+
+                                            <ButtonBase
+                                                className={classes.setting} disabled={!this.state.bluetoothConfigSettings.valid}
+                                                onClick={() => this.setState({ showBluetoothConfigDialog: true })}  >
+                                                <SelectHoverBackground selected={false} showHover={true} />
+                                                <div style={{ width: "100%" }}>
+                                                    <Typography className={classes.primaryItem} display="block" variant="body2" color="textPrimary" noWrap>
+                                                        Bluetooth remote</Typography>
+                                                    <Typography display="block" variant="caption" noWrap color="textSecondary">
+                                                        {this.state.bluetoothConfigSettings.getSummaryText()}
+                                                    </Typography>
+                                                </div>
+                                            </ButtonBase>
 
                                             {
                                                 this.state.isAndroidHosted &&
@@ -1122,6 +1164,16 @@ const SettingsDialog = withStyles(
                             <WifiDirectConfigDialog wifiDirectConfigSettings={this.state.wifiDirectConfigSettings} open={this.state.showWifiDirectConfigDialog}
                                 onClose={() => this.setState({ showWifiDirectConfigDialog: false })}
                                 onOk={(wifiDirectConfigSettings: WifiDirectConfigSettings) => this.handleApplyWifiDirectConfig(wifiDirectConfigSettings)}
+                            />
+
+                        )
+                    }
+                    {
+                        (this.state.showBluetoothConfigDialog) &&
+                        (
+                            <BluetoothConfigDialog bluetoothConfigSettings={this.state.bluetoothConfigSettings} open={this.state.showBluetoothConfigDialog}
+                                onClose={() => this.setState({ showBluetoothConfigDialog: false })}
+                                onOk={(bluetoothConfigSettings) => this.handleApplyBluetoothConfig(bluetoothConfigSettings)}
                             />
 
                         )

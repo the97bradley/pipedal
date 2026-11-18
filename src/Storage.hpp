@@ -28,6 +28,7 @@
 #include "JackServerSettings.hpp"
 #include "WifiConfigSettings.hpp"
 #include "WifiDirectConfigSettings.hpp"
+#include "BluetoothConfigSettings.hpp"
 #include "FileEntry.hpp"
 #include <map>
 #include "FilePropertyDirectoryTree.hpp"
@@ -124,6 +125,7 @@ private:
 
     WifiConfigSettings wifiConfigSettings;
     WifiDirectConfigSettings wifiDirectConfigSettings;
+    BluetoothConfigSettings bluetoothConfigSettings;
 
     UserSettings userSettings;
 
@@ -161,6 +163,7 @@ public:
 
     void LoadWifiConfigSettings();
     void LoadWifiDirectConfigSettings();
+    void LoadBluetoothConfigSettings();
     void LoadUserSettings();
     void SaveUserSettings();
 
@@ -212,6 +215,9 @@ public:
 
     void SetWifiDirectConfigSettings(const WifiDirectConfigSettings & wifiDirectConfigSettings);
     WifiDirectConfigSettings GetWifiDirectConfigSettings();
+
+    void SetBluetoothConfigSettings(const BluetoothConfigSettings & bluetoothConfigSettings);
+    BluetoothConfigSettings GetBluetoothConfigSettings();
 
 
     void SetGovernorSettings(const std::string & governor);
