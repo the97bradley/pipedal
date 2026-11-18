@@ -41,6 +41,7 @@ import { isDarkMode } from './DarkMode';
 import {
     Pedalboard, PedalboardItem, PedalboardSplitItem, SplitType
 } from './Pedalboard';
+import { BYPASS_PEDAL_COUNT, getBypassPedal, isBypassableEffect } from './BypassPedal';
 
 // import MidiIcon from './svg/ic_midi.svg?react';
 // import { midiChannelBindingControlFeatureEnabled } from './MidiChannelBinding';
@@ -140,6 +141,19 @@ const pedalboardStyles = (theme: Theme) => createStyles({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+    }),
+    bypassPedalSelect: css({
+        width: CELL_WIDTH - 8,
+        height: 22,
+        marginTop: 2,
+        fontSize: 11,
+        lineHeight: "20px",
+        borderRadius: 4,
+        border: "1px solid " + theme.palette.divider,
+        background: theme.palette.background.paper,
+        color: theme.palette.text.primary,
+        paddingLeft: 4,
+        paddingRight: 2,
     }),
     midiConnectorDecoration: css({
         position: "absolute",
@@ -626,12 +640,15 @@ const PedalboardView =
                     this.setState({
                         pedalboard: value,
                     });
+                    if (value) {
+                        this.model.ensureDefaultBypassPedals();
+                    }
                 }
 
                 componentDidMount() {
                     this.scrollRef.current!.addEventListener("touchstart", this.handleTouchStart, { passive: false });
                     this.model.pedalboard.addOnChangedHandler(this.onPedalboardChanged);
-
+                    this.model.ensureDefaultBypassPedals();
                 }
                 componentWillUnmount() {
                     this.scrollRef.current!.removeEventListener("touchstart", this.handleTouchStart);
@@ -770,7 +787,7 @@ const PedalboardView =
                         this.offsetLayout_(layoutItems, -bounds.y);
                     }
 
-                    bounds.height += 14; // for labels that aren't accounted for.
+                    bounds.height += 14 + 26; // plugin name + bypass-pedal dropdown
                     return { width: bounds.width, height: bounds.height };
 
                 }
@@ -1198,9 +1215,11 @@ const PedalboardView =
                                     </div>);
 
                                 } else {
+                                    let bypassable = !!(item.pedalItem && isBypassableEffect(item.pedalItem));
+                                    let bypassPedal = item.pedalItem ? getBypassPedal(item.pedalItem) : 0;
                                     result.push(
                                         <div key={this.renderKey++} style={{
-                                            display: "flex", justifyContent: "flex-start", alignItems: "flex-start",
+                                            display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "center",
                                             position: "absolute", left: item.bounds.x, width: CELL_WIDTH, top: item.bounds.bottom - 12, paddingLeft: 2, paddingRight: 2
                                         }}>
                                             <Typography variant="caption" display="block" noWrap={true}
@@ -1209,6 +1228,28 @@ const PedalboardView =
                                                     opacity: item.pedalItem?.isEnabled ?? true ? 1.0 : 0.4
                                                 }}
                                             >{item.name}</Typography>
+                                            {bypassable && (
+                                                <select
+                                                    className={classes.bypassPedalSelect}
+                                                    aria-label={"Bypass pedal for " + (item.name || "effect")}
+                                                    value={bypassPedal}
+                                                    onMouseDown={(e) => { e.stopPropagation(); }}
+                                                    onClick={(e) => { e.stopPropagation(); }}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        let instanceId = item.pedalItem?.instanceId;
+                                                        if (instanceId === undefined || instanceId < 0) {
+                                                            return;
+                                                        }
+                                                        this.model.setBypassPedal(instanceId, Number(e.target.value));
+                                                    }}
+                                                >
+                                                    <option value={0}>None</option>
+                                                    {Array.from({ length: BYPASS_PEDAL_COUNT }, (_, i) => (
+                                                        <option key={i + 1} value={i + 1}>Pedal {i + 1}</option>
+                                                    ))}
+                                                </select>
+                                            )}
                                         </div>
                                     )
                                     let uiPlugin = this.model.getUiPlugin(item.pedalItem?.uri ?? "");

@@ -35,6 +35,7 @@ import { BankIndex } from './Banks';
 import JackHostStatus from './JackHostStatus';
 import JackServerSettings from './JackServerSettings';
 import MidiBinding from './MidiBinding';
+import { getBypassPedal, isBypassableEffect, makeBypassPedalBinding, BYPASS_PEDAL_COUNT } from './BypassPedal';
 import { PluginUiPresets } from './PluginPreset';
 import WifiConfigSettings from './WifiConfigSettings';
 import WifiDirectConfigSettings from './WifiDirectConfigSettings';
@@ -1480,6 +1481,7 @@ export class PiPedalModel //implements PiPedalModel
                     await this.getWebSocket().request<Pedalboard>("currentPedalboard")
                 )
             );
+            this.ensureDefaultBypassPedals();
             this.plugin_classes.set(new PluginClass().deserialize(
                 await this.getWebSocket().request<any>("pluginClasses")
             ));
@@ -2904,6 +2906,86 @@ export class PiPedalModel //implements PiPedalModel
             // TODO: a more efficient notification.
             this.updateServerPedalboard()
 
+        }
+    }
+
+    getBypassPedal(instanceId: number): number {
+        let pedalboard = this.pedalboard.get();
+        if (!pedalboard || !pedalboard.hasItem(instanceId)) {
+            return 0;
+        }
+        return getBypassPedal(pedalboard.getItem(instanceId));
+    }
+
+    setBypassPedal(instanceId: number, pedal: number): void {
+        let pedalboard = this.pedalboard.get();
+        if (!pedalboard) {
+            throw new PiPedalStateError("Pedalboard not loaded.");
+        }
+        let newPedalboard = pedalboard.clone();
+        this.updateVst3State(newPedalboard);
+        if (pedal >= 1 && pedal <= BYPASS_PEDAL_COUNT) {
+            for (let item of newPedalboard.itemsGenerator()) {
+                if (item.instanceId === instanceId) {
+                    continue;
+                }
+                if (getBypassPedal(item) === pedal) {
+                    item.setMidiBinding(makeBypassPedalBinding(0));
+                }
+            }
+        }
+        if (!newPedalboard.hasItem(instanceId)) {
+            return;
+        }
+        newPedalboard.setMidiBinding(instanceId, makeBypassPedalBinding(pedal));
+        this.setModelPedalboard(newPedalboard);
+        this.updateServerPedalboard();
+        this.saveCurrentPreset();
+    }
+
+    private applyingBypassDefaults = false;
+
+    ensureDefaultBypassPedals(): void {
+        if (this.applyingBypassDefaults) {
+            return;
+        }
+        let pedalboard = this.pedalboard.get();
+        if (!pedalboard) {
+            return;
+        }
+        let effects: PedalboardItem[] = [];
+        for (let item of pedalboard.itemsGenerator()) {
+            if (isBypassableEffect(item)) {
+                effects.push(item);
+            }
+        }
+        if (effects.length === 0) {
+            return;
+        }
+        for (let item of effects) {
+            if (getBypassPedal(item) > 0) {
+                return;
+            }
+        }
+        this.applyingBypassDefaults = true;
+        try {
+            let newPedalboard = pedalboard.clone();
+            this.updateVst3State(newPedalboard);
+            let index = 0;
+            for (let item of newPedalboard.itemsGenerator()) {
+                if (!isBypassableEffect(item)) {
+                    continue;
+                }
+                if (index < BYPASS_PEDAL_COUNT) {
+                    item.setMidiBinding(makeBypassPedalBinding(index + 1));
+                }
+                index++;
+            }
+            this.setModelPedalboard(newPedalboard);
+            this.updateServerPedalboard();
+            this.saveCurrentPreset();
+        } finally {
+            this.applyingBypassDefaults = false;
         }
     }
     setSystemMidiBinding(instanceId: number, midiBinding: MidiBinding): void {

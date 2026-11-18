@@ -41,6 +41,9 @@ export default class MidiBinding {
     }
     static deserialize_array(input: any): MidiBinding[] {
         let result: MidiBinding[] = [];
+        if (!input) {
+            return result;
+        }
         for (let i = 0; i < input.length; ++i)
         {
             result.push(new MidiBinding().deserialize(input[i]));

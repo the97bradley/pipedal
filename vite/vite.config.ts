@@ -25,5 +25,24 @@ export default defineConfig({
         changeOrigin: false,
       },
     }
-}
+  },
+  preview: {
+    host: true,
+    port: 5173,
+    proxy: {
+      '/pipedal': {
+        target: 'http://127.0.0.1:80',
+        changeOrigin: false,
+        ws: true,
+      },
+      '/resources': {
+        target: 'http://127.0.0.1:80',
+        changeOrigin: false,
+      },
+      '^/var/.*': {
+        target: 'http://127.0.0.1:80',
+        changeOrigin: false,
+      },
+    }
+  }
 })
