@@ -21,6 +21,7 @@ import React, { ReactNode, SyntheticEvent, CSSProperties, Fragment, ReactElement
 
 import { PiPedalModel, PiPedalModelFactory, FavoritesList } from './PiPedalModel';
 import { UiPlugin, PluginType } from './Lv2Plugin';
+import { isBassCompatiblePlugin } from './BassCompatible';
 import TextField from '@mui/material/TextField';
 import ButtonBase from '@mui/material/ButtonBase';
 import Button from '@mui/material/Button';
@@ -527,6 +528,8 @@ export const LoadPluginDialog =
 
                     for (let i = 0; i < plugins.length; ++i) {
                         let plugin = plugins[i];
+                        if (!isBassCompatiblePlugin(plugin))
+                            continue;
                         if (this.props.modGuiOnly == true && !plugin.modGui)
                             continue;
                         try {

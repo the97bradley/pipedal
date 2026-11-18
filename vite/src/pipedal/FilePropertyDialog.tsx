@@ -69,6 +69,7 @@ import FilePropertyDirectorySelectDialog from './FilePropertyDirectorySelectDial
 import { getAlbumArtUri, getTrackTitle } from './AudioFileMetadata';
 import Tone3000DownloadType from './Tone3000DownloadType';
 import { ModelSelectionDialog, ModelSelectionDialogParams } from './ModelSelectionDialog';
+import { isBassCompatibleFile } from './BassCompatible';
 
 
 const ToobNamModelFileUrl = "http://two-play.com/plugins/toob-nam#modelFile";
@@ -321,6 +322,9 @@ export default withStyles(
                 .then((filesResult) => {
                     if (this.mounted) {
                         this.cancelProgressTimeout();
+                        filesResult.files = filesResult.files.filter((entry) =>
+                            isBassCompatibleFile(entry.pathname, entry.displayName, entry.isDirectory)
+                        );
                         filesResult.files.splice(0, 0, { pathname: "", displayName: "<none>", isDirectory: false, isProtected: true });
 
                         let fileEntry = this.getFileEntry(filesResult.files, this.state.selectedFile);
