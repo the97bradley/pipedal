@@ -42,7 +42,8 @@ namespace pipedal {
     public:
         ~AvahiService() { Stop(); }
         void Announce(
-            int portNumber, const std::string &name, const std::string &instanceId, const std::string&mdnsName, bool wait);
+            int portNumber, const std::string &name, const std::string &instanceId, const std::string&mdnsName, bool wait,
+            const std::string &hotspotIpv4 = "");
 
         void Unannounce(bool wait);
     private: 
@@ -88,6 +89,7 @@ namespace pipedal {
         std::string instanceId;
         std::string serviceName;
         std::string mdnsName;
+        std::string hotspotIpv4;
 
         AvahiClient *client = NULL;
         AvahiEntryGroup *group = NULL;

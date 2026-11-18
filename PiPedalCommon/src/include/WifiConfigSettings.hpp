@@ -56,7 +56,9 @@ namespace pipedal {
         NoEthernetConnection = 1,
         NotAtHome = 2,
         NoRememberedWifiConections = 3,
-        Always = 4
+        Always = 4,
+        // Start the hotspot if Ethernet and Wi-Fi client connections time out.
+        NoNetworkConnection = 5
     };
     class WifiConfigSettings {
     public:
@@ -97,10 +99,19 @@ namespace pipedal {
         bool ConfigurationChanged(const WifiConfigSettings&other) const;
         bool WantsHotspot(bool ethernetConnected) 
         {
-            return WantsHotspot(ethernetConnected, std::vector<std::string>{}, std::vector<std::string>{});
+            return WantsHotspot(ethernetConnected, false, std::vector<std::string>{}, std::vector<std::string>{});
         }
         bool WantsHotspot(
             bool ethernetConnected, 
+            const std::vector<std::string> &availableRememberedNetworks, // remembered networks that are currently visible
+            const std::vector<std::string> &availableNetworks // all visible networks.
+        )
+        {
+            return WantsHotspot(ethernetConnected, false, availableRememberedNetworks, availableNetworks);
+        }
+        bool WantsHotspot(
+            bool ethernetConnected,
+            bool wifiClientConnected,
             const std::vector<std::string> &availableRememberedNetworks, // remembered networks that are currently visible
             const std::vector<std::string> &availableNetworks // all visible networks.
         );
@@ -108,9 +119,19 @@ namespace pipedal {
             bool ethernetConnected, 
             const std::vector<std::vector<uint8_t>> &availableRememberedNetworks, // remembered networks that are currently visible
             const std::vector<std::vector<uint8_t>> &availableNetworks // all visible networks.
+            )
+        {
+            return WantsHotspot(ethernetConnected, false, availableRememberedNetworks, availableNetworks);
+        }
+        bool WantsHotspot(
+            bool ethernetConnected,
+            bool wifiClientConnected,
+            const std::vector<std::vector<uint8_t>> &availableRememberedNetworks,
+            const std::vector<std::vector<uint8_t>> &availableNetworks
             );
         bool NeedsScan() const;
         bool NeedsWifi() const;
+        bool NeedsConnectionTimeout() const;
     public:
         DECLARE_JSON_MAP(WifiConfigSettings);
     };

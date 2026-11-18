@@ -1407,6 +1407,10 @@ static void PrintHelp()
         << "--no-wifi\n"
         << AddIndent(4) << "Hotspot is disabled if a remembered Wi-Fi network is detected.\n"
         << AddIndent(-4)
+        << "--no-connection\n"
+        << AddIndent(4) << "Wait for Ethernet or a remembered Wi-Fi network; start the hotspot if nothing connects in 45 seconds.\n"
+        << AddIndent(4) << "SSH and pipedal.local remain available on the hotspot.\n"
+        << AddIndent(-4)
         << "\n"
         << "Caution: Wi-Fi connections are disabled when the hotspot is activated. If you currently access your Raspberry Pi using  "
         << "Wi-Fi, choose your hotspot options carefully, to ensure that you can still access your Raspberry Pi."
@@ -1581,6 +1585,7 @@ int main(int argc, char **argv)
     bool noEthernet = false;
     bool list_wifi_country_codes = false;
     bool noWifi = false;
+    bool noConnection = false;
 
     parser.AddOption("--nosudo", &nosudo); // strictly a debugging aid. Run without sudo, until we fail because of permissions.
     parser.AddOption("--list-wifi-country-codes", &list_wifi_country_codes);
@@ -1600,6 +1605,7 @@ int main(int argc, char **argv)
     parser.AddOption("--home-network", &homeNetwork);
     parser.AddOption("--no-ethernet", &noEthernet);
     parser.AddOption("--no-wifi", &noWifi);
+    parser.AddOption("--no-connection", &noConnection);
     parser.AddOption("--alsa-devices", &alsaDevices);
     parser.AddOption("--alsa-device", &alsaDevice);
     parser.AddOption("--fix-permissions", &fix_permissions);
@@ -1646,7 +1652,7 @@ int main(int argc, char **argv)
             }
         }
         int hotspotOptionCount =
-            (homeNetwork.length() != 0 ? 1 : 0) + noEthernet + noWifi;
+            (homeNetwork.length() != 0 ? 1 : 0) + noEthernet + noWifi + noConnection;
 
         if (enable_hotspot)
         {
@@ -1858,6 +1864,10 @@ int main(int argc, char **argv)
             else if (noWifi)
             {
                 startMode = HotspotAutoStartMode::NoRememberedWifiConections;
+            }
+            else if (noConnection)
+            {
+                startMode = HotspotAutoStartMode::NoNetworkConnection;
             }
 
             settings.ParseArguments(argv, startMode, homeNetwork);

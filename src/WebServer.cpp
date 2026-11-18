@@ -35,6 +35,7 @@
 #include <set>
 #include <strings.h>
 #include "Ipv6Helpers.hpp"
+#include "HotspotConstants.hpp"
 #include "util.hpp"
 #include "ofstream_synced.hpp"
 #include "ModTemplateGenerator.hpp"
@@ -1486,7 +1487,7 @@ void WebServerImpl::DisplayIpAddresses()
     auto wifiAddress = GetWlanIpv4Address();
     if (wifiAddress)
     {
-        if (*wifiAddress == "10.42.0.1")
+        if (IsPipedalHotspotIpv4(*wifiAddress))
         {
             Lv2Log::info(SS("Listening on Wi-Fi hotspot address " << *wifiAddress << ":" << this->port));
         }

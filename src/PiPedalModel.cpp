@@ -43,6 +43,8 @@
 #include "util.hpp"
 #include "DBusLog.hpp"
 #include "AvahiService.hpp"
+#include "HotspotConstants.hpp"
+#include "Ipv6Helpers.hpp"
 #include "DummyAudioDriver.hpp"
 #include "AudioFiles.hpp"
 #include "CrashGuard.hpp"
@@ -1550,9 +1552,17 @@ void PiPedalModel::UpdateDnsSd()
     }
 
     std::string hostName = GetHostName();
+    std::string hotspotIpv4;
+    if (auto wlan = GetWlanIpv4Address())
+    {
+        if (IsPipedalHotspotIpv4(*wlan))
+        {
+            hotspotIpv4 = *wlan;
+        }
+    }
     if (serviceName != "" && deviceIdFile.uuid != "")
     {
-        avahiService->Announce(webPort, serviceName, deviceIdFile.uuid, hostName, true);
+        avahiService->Announce(webPort, serviceName, deviceIdFile.uuid, hostName, true, hotspotIpv4);
     }
     else
     {
@@ -3335,6 +3345,20 @@ void PiPedalModel::OnNetworkChanging(bool ethernetConnected, bool hotspotConnect
 }
 void PiPedalModel::OnNetworkChanged(bool ethernetConnected, bool hotspotConnected)
 {
+    (void)ethernetConnected;
+    (void)hotspotConnected;
+    try
+    {
+        // Re-publish pipedal.local after the hotspot address is up (or retract it when it goes down).
+        if (avahiService)
+        {
+            UpdateDnsSd();
+        }
+    }
+    catch (const std::exception &e)
+    {
+        Lv2Log::warning(SS("Failed to refresh mDNS after a network change. " << e.what()));
+    }
     FireNetworkChanged();
 }
 

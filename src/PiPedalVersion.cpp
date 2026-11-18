@@ -22,6 +22,7 @@
 #include "config.hpp"
 #include "PiPedalVersion.hpp"
 #include "Ipv6Helpers.hpp"
+#include "HotspotConstants.hpp"
 
 #ifdef _WIN32
 #include "windows.h"
@@ -92,6 +93,10 @@ PiPedalVersion::PiPedalVersion(PiPedalModel&model)
     gethostname(hostName,sizeof(hostName));
 
     this->webAddresses_.push_back(MakeWebAddress(SS(hostName << ".local"),port));
+    if (std::string(hostName) != kPipedalHotspotMdnsName)
+    {
+        this->webAddresses_.push_back(MakeWebAddress(SS(kPipedalHotspotMdnsName << ".local"),port));
+    }
 
 
     auto ethAddresses = GetEthernetIpv4Addresses();

@@ -146,6 +146,10 @@ If you normally connect to your Raspberry Pi through a Wi-Fi router, <b><i>Not a
 PiPedal hotspot will be automatically turned off whenever your home Wi-Fi router is in range, and automatically turned on
 when you are out of range of your home Wi-Fi router.
 
+If you control PiPedal from an iPad, or you want the Pi to keep working at a gig when no home network is nearby, choose <b><i>No network connection</i></b>.
+PiPedal lets the Raspberry Pi try remembered Wi-Fi networks and Ethernet for 45 seconds. If nothing connects, it starts the hotspot automatically.
+Join the hotspot from the iPad, then open http://pipedal.local (or http://192.168.60.1). SSH stays available at the same addresses, for example `ssh user@pipedal.local`.
+
 If there are multiple locations, and multiple Wi-Fi routers you use with PiPedal on a regular basis, you can choose to start the 
 PiPedal Wi-Fi hotspot when <b><i>No remembered Wi-Fi connections</i></b> are visible, but this is a riskier option. The PiPedal hotspot will be automatically turned on if there are no
 Wi-Fi access points in range that you have previously connected to from your Raspberry Pi, and will be automatically turned on otherwise.
@@ -183,7 +187,7 @@ works on laptop-hosted hotspots when using Windows or Mac OS. If are running Lin
 Avahi package to get mDNS/Bonjour name resolution to work.
 
 And if that doesn't work, you can configure PiPedal to launch an auto-hotspot, and then connect from your laptop to the PiPedal hotspot on your Raspberry Pi.
-When the Raspberry Pi hosts the hotspot, mDNS discovery is definitely enabled; so you should be able to connect using http://raspberrypi. But if that doesn't work, PiPedal's IP address will always be 10.40.0.1, when the PiPedal Wi-Fi hotspot is running, so you can always connect using  http://172.23.0.2.
+When the Raspberry Pi hosts the hotspot, open http://pipedal.local or http://hostname.local. If name resolution fails, the hotspot address is always http://192.168.60.1. SSH uses the same names, for example `ssh user@pipedal.local`.
 
 
 --------

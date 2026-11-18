@@ -3686,9 +3686,11 @@ export class PiPedalModel //implements PiPedalModel
             }
         }
         if (this.networkChanging_expectHotspot) {
-            let newUrl = await this.detectServer("10.40.0.1");
-            if (newUrl.length !== 0) {
-                return newUrl;
+            for (let address of ["pipedal.local", "192.168.60.1", "10.42.0.1"]) {
+                let newUrl = await this.detectServer(address);
+                if (newUrl.length !== 0) {
+                    return newUrl;
+                }
             }
         }
         return "";

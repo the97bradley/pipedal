@@ -487,6 +487,7 @@ add_executable(pipedaltest
     AlsaDriverTest.cpp
     AvahiServiceTest.cpp
     WifiChannelsTest.cpp
+    WifiConfigSettingsTest.cpp
     PiPedalAlsaTest.cpp
     UnixSocketTest.cpp
 

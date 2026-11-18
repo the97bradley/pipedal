@@ -776,6 +776,7 @@ static bool CanSeeHomeNetwork(const std::string &home, const std::vector<std::st
 
 bool WifiConfigSettings::WantsHotspot(
     bool ethernetConnected,
+    bool wifiClientConnected,
     const std::vector<std::string> &availableRememberedNetworks,
     const std::vector<std::string> &availableNetworks)
 {
@@ -798,6 +799,8 @@ bool WifiConfigSettings::WantsHotspot(
         return availableRememberedNetworks.size() == 0;
     case HotspotAutoStartMode::Always:
         return true;
+    case HotspotAutoStartMode::NoNetworkConnection:
+        return !ethernetConnected && !wifiClientConnected;
     }
 }
 
@@ -825,13 +828,14 @@ std::vector<std::string> pipedal::ssidToStringVector(const std::vector<std::vect
 }
 bool WifiConfigSettings::WantsHotspot(
     bool ethernetConnected,
+    bool wifiClientConnected,
     const std::vector<std::vector<uint8_t>> &availableRememberedNetworks, // remembered networks that are currently visible
     const std::vector<std::vector<uint8_t>> &availableNetworks            // all visible networks.
 )
 {
     std::vector<std::string> sAvailableRememberedNetworks = ssidToStringVector(availableRememberedNetworks);
     std::vector<std::string> sAvailableNetworks = ssidToStringVector(availableNetworks);
-    return WantsHotspot(ethernetConnected, sAvailableRememberedNetworks, sAvailableNetworks);
+    return WantsHotspot(ethernetConnected, wifiClientConnected, sAvailableRememberedNetworks, sAvailableNetworks);
 }
 
 bool WifiConfigSettings::NeedsWifi() const
@@ -849,6 +853,7 @@ bool WifiConfigSettings::NeedsScan() const
     case HotspotAutoStartMode::Never:
     case HotspotAutoStartMode::NoEthernetConnection:
     case HotspotAutoStartMode::Always:
+    case HotspotAutoStartMode::NoNetworkConnection:
     default:
         return false;
 
@@ -856,4 +861,9 @@ bool WifiConfigSettings::NeedsScan() const
     case HotspotAutoStartMode::NoRememberedWifiConections:
         return true;
     }
+}
+
+bool WifiConfigSettings::NeedsConnectionTimeout() const
+{
+    return (HotspotAutoStartMode)this->autoStartMode_ == HotspotAutoStartMode::NoNetworkConnection;
 }

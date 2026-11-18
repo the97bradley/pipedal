@@ -296,7 +296,7 @@ protected:
         EventTrace("onAccessPointAdded", access_point.c_str());
         OnAccessPointAdded.fire(access_point);
     }
-    virtual void onAccessPointRemoved(const sdbus::ObjectPath& access_point) {
+    virtual void onAccessPointRemoved(const sdbus::ObjectPath& access_point) override {
         EventTrace("onAccessPointRemoved",access_point.c_str());
 
         OnAccessPointRemoved.fire(access_point);

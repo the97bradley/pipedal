@@ -70,6 +70,15 @@ install (
     FILES ${PROJECT_SOURCE_DIR}/src/polkit-1/rules/10-pipedal-networkmanager.rules DESTINATION /etc/polkit-1/rules.d/
 )
 install (
+    FILES ${PROJECT_SOURCE_DIR}/src/templates/dnsmasq-shared-pipedal.conf
+    DESTINATION /etc/NetworkManager/dnsmasq-shared.d
+    RENAME pipedal.conf
+)
+install (
+    PROGRAMS ${PROJECT_SOURCE_DIR}/src/templates/50-pipedal-hotspot
+    DESTINATION /etc/NetworkManager/dispatcher.d
+)
+install (
     DIRECTORY ${VITE_BUILD_DIRECTORY} DESTINATION /etc/pipedal/react
 )
 if(NOT PIPEDAL_DISABLE_COPYRIGHT_BUILD)

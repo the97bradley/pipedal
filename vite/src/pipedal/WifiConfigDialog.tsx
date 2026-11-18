@@ -428,6 +428,7 @@ const WifiConfigDialog = withStyles(
                                         <MenuItem value={2}>Not at home</MenuItem>
                                         <MenuItem value={3}>No remembered Wi-Fi connections</MenuItem>
                                         <MenuItem value={4}>Always</MenuItem>
+                                        <MenuItem value={5}>No network connection</MenuItem>
                                     </Select>
                                     <FormHelperText>{NBSP}</FormHelperText>
                                 </FormControl>
@@ -650,6 +651,12 @@ const WifiConfigDialog = withStyles(
                                     acceptable risk is up to you.
                                 </Typography>
                                 <Typography className={classes.pgraph} variant="body2" color="textPrimary">
+                                    If you control PiPedal from an iPad (or any device that should keep working at a gig with no home Wi-Fi nearby),
+                                    choose <b><i>No network connection</i></b>. PiPedal lets NetworkManager try remembered Wi-Fi networks and Ethernet
+                                    for 45 seconds. If nothing connects, it starts the hotspot. SSH stays available, and you can open the UI at
+                                    http://pipedal.local (or http://192.168.60.1).
+                                </Typography>
+                                <Typography className={classes.pgraph} variant="body2" color="textPrimary">
                                     Typically, when you're away from home, there's no easy way to connect to your Raspberry Pi from a laptop in order to
                                     correct the problem. So you should carefully test that your auto-hotspot configuration works as expected before you adventure
                                     away from home with PiPedal.
@@ -683,7 +690,8 @@ const WifiConfigDialog = withStyles(
                                         online documentation</a> provides a discussion of how to choose safe hotspot auto-start options.
                                 </Typography>
                                 <Typography className={classes.pgraph} variant="body2" color="textPrimary">
-                                    When you are connected to the PiPedal hotspot, you can connect to the PiPedal web server at http://10.48.0.1.
+                                    When you are connected to the PiPedal hotspot, open http://pipedal.local or http://192.168.60.1.
+                                    SSH remains available at the same addresses (for example, ssh user@pipedal.local).
                                 </Typography>
                                 <Typography className={classes.pgraph} variant="body2" color="textPrimary" gutterBottom>
                                     Are you sure you want to continue?

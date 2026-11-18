@@ -26,6 +26,7 @@
 #include "NetworkManagerInterfaces.hpp"
 #include "ss.hpp"
 #include "WifiConfigSettings.hpp"
+#include "HotspotConstants.hpp"
 #include "ServiceConfiguration.hpp"
 #include <unordered_set>
 #include <mutex>
@@ -39,7 +40,7 @@ namespace fs = std::filesystem;
 namespace pipedal::impl
 {
 
-#define PIPEDAL_HOTSPOT_NAME "PiPedal Hotspot"
+#define PIPEDAL_HOTSPOT_NAME kPipedalHotspotConnectionId
 
     class HotspotManagerImpl : public HotspotManager
     {
@@ -121,6 +122,10 @@ namespace pipedal::impl
         void StopScanTimer();
         void ScanNow();
 
+        bool IsWifiClientConnected();
+        void StartConnectionTimeoutIfNeeded();
+        void CancelConnectionTimeout();
+
         Connection::ptr FindExistingConnection();
 
         Device::ptr GetDevice(uint32_t nmDeviceType);
@@ -142,8 +147,9 @@ namespace pipedal::impl
         std::mutex knownWifiNetworksMutex;
         std::vector<std::string> knownWifiNetworks;
 
-        bool ethernetConnected = true;
-        bool wlanConnected = true;
+        bool ethernetConnected = false;
+        bool wlanConnected = false;
+        bool connectionTimeoutElapsed = false;
 
         DBusEventHandle onDeviceAddedHandle = INVALID_DBUS_EVENT_HANDLE;
         DBusEventHandle onDeviceRemovedHandle = INVALID_DBUS_EVENT_HANDLE;
@@ -151,6 +157,7 @@ namespace pipedal::impl
         DBusDispatcher::PostHandle networkManagerTimerHandle = 0;
         DBusDispatcher::PostHandle accessPointsChangedTimerHandle = 0;
         DBusDispatcher::PostHandle scanTimerHandle = 0;
+        DBusDispatcher::PostHandle connectionTimeoutHandle = 0;
     };
 }
 using namespace pipedal::impl;
@@ -177,6 +184,7 @@ void HotspotManagerImpl::onClose()
     CancelDeviceChangedTimer();
     CancelWaitForNetworkManagerTimer();
     CancelAccessPointsChangedTimer();
+    CancelConnectionTimeout();
 
     if (networkManager && activeConnection)
     {
@@ -252,7 +260,9 @@ void HotspotManagerImpl::UpdateNetworkManagerStatus()
 
         SetHasWifi(!!wlanDevice);
 
-        if (ethernetDevice && wlanDevice)
+        // Wi-Fi is required to host the auto-hotspot. Ethernet is optional
+        // (Pi Zero W and some CM4 boards have no ethernet NIC).
+        if (wlanDevice)
         {
             if (state == State::Initial || state == State::WaitingForNetworkManager)
             {
@@ -261,8 +271,6 @@ void HotspotManagerImpl::UpdateNetworkManagerStatus()
             }
             return;
         }
-
-        // check to see whether we have BOTH an eth0 device and a wlan0 device.
     }
     catch (const std::exception &e)
     {
@@ -291,6 +299,7 @@ void HotspotManagerImpl::ReleaseNetworkManager()
     CancelAccessPointsChangedTimer();
     CancelWaitForNetworkManagerTimer();
     CancelDeviceChangedTimer();
+    CancelConnectionTimeout();
 
     DisableHotspot();
 
@@ -323,7 +332,7 @@ Device::ptr HotspotManagerImpl::GetDevice(uint32_t nmDeviceType)
 }
 void HotspotManagerImpl::OnEthernetStateChanged(uint32_t state)
 {
-    bool newValue = (state == 100);
+    bool newValue = (state == NM_DEVICE_STATE_ACTIVATED);
     if (newValue != this->ethernetConnected)
     {
         this->ethernetConnected = newValue;
@@ -334,7 +343,7 @@ void HotspotManagerImpl::OnEthernetStateChanged(uint32_t state)
 }
 void HotspotManagerImpl::OnWlanStateChanged(uint32_t state)
 {
-    bool value = (state == 100);
+    bool value = (state == NM_DEVICE_STATE_ACTIVATED);
     if (value != this->wlanConnected)
     {
         this->wlanConnected = value;
@@ -374,15 +383,19 @@ void HotspotManagerImpl::onStartMonitoring()
             });
 
         ethernetDevice = GetDevice(NM_DEVICE_TYPE_ETHERNET);
-        if (!ethernetDevice)
+        if (ethernetDevice)
         {
-            throw std::runtime_error("ethernet device not found.");
+            this->ethernetDevice->OnStateChanged.add(
+                [this](uint32_t, uint32_t, uint32_t)
+                {
+                    OnEthernetStateChanged(ethernetDevice->State());
+                });
         }
-        this->ethernetDevice->OnStateChanged.add(
-            [this](uint32_t, uint32_t, uint32_t)
-            {
-                OnEthernetStateChanged(ethernetDevice->State());
-            });
+        else
+        {
+            this->ethernetConnected = false;
+            Lv2Log::info("HotspotManager: No ethernet device; auto-hotspot will use Wi-Fi only.");
+        }
 
         wlanDevice = GetDevice(NM_DEVICE_TYPE_WIFI);
         if (!wlanDevice)
@@ -413,7 +426,10 @@ void HotspotManagerImpl::onStartMonitoring()
 
         Lv2Log::info("HotspotManager: Monitoring network status.");
 
-        OnEthernetStateChanged(ethernetDevice->State());
+        if (ethernetDevice)
+        {
+            OnEthernetStateChanged(ethernetDevice->State());
+        }
         OnWlanStateChanged(wlanDevice->State());
 
         SetHasWifi(true);
@@ -486,6 +502,7 @@ void HotspotManagerImpl::onReload()
     default:
         // force a reload.
         StopHotspot();
+        CancelConnectionTimeout();
         SetState(State::Monitoring);
         StartScanTimer(); // or stop it as the case may be.
         MaybeStartHotspot();
@@ -751,6 +768,67 @@ static std::vector<std::vector<uint8_t>> GetAccessPointSsids(std::vector<AccessP
     }
     return result;
 }
+bool HotspotManagerImpl::IsWifiClientConnected()
+{
+    if (!wlanDevice)
+        return false;
+    if (wlanDevice->State() != NM_DEVICE_STATE_ACTIVATED)
+        return false;
+    // Our own AP uses the same activated state; that is not a client connection.
+    if (this->activeConnection)
+        return false;
+
+    auto activeConnectionPath = wlanDevice->ActiveConnection();
+    if (activeConnectionPath.length() <= 2) // "/" -> no connection.
+        return false;
+
+    try
+    {
+        auto connection = ActiveConnection::Create(dbusDispatcher, activeConnectionPath);
+        auto settingsConnection = Connection::Create(dbusDispatcher, connection->Connection());
+        auto settings = settingsConnection->GetSettings();
+        if (settings["802-11-wireless"].count("mode") > 0)
+        {
+            auto mode = settings["802-11-wireless"]["mode"].get<std::string>();
+            if (mode == "ap")
+                return false;
+        }
+        return true;
+    }
+    catch (const std::exception &)
+    {
+        return false;
+    }
+}
+
+void HotspotManagerImpl::StartConnectionTimeoutIfNeeded()
+{
+    if (connectionTimeoutHandle || connectionTimeoutElapsed)
+        return;
+
+    Lv2Log::info(SS("HotspotManager: No network yet; starting hotspot in "
+                    << kHotspotConnectTimeout.count() << " seconds if Wi-Fi/Ethernet do not connect."));
+    connectionTimeoutHandle = dbusDispatcher.PostDelayed(
+        kHotspotConnectTimeout,
+        [this]()
+        {
+            connectionTimeoutHandle = 0;
+            connectionTimeoutElapsed = true;
+            Lv2Log::info("HotspotManager: Wi-Fi connection timed out. Starting auto-hotspot.");
+            MaybeStartHotspot();
+        });
+}
+
+void HotspotManagerImpl::CancelConnectionTimeout()
+{
+    if (connectionTimeoutHandle)
+    {
+        dbusDispatcher.CancelPost(connectionTimeoutHandle);
+        connectionTimeoutHandle = 0;
+    }
+    connectionTimeoutElapsed = false;
+}
+
 void HotspotManagerImpl::MaybeStartHotspot()
 {
     if (this->state == State::Error)
@@ -764,6 +842,7 @@ void HotspotManagerImpl::MaybeStartHotspot()
         return;
     }
 
+    bool wifiClientConnected = IsWifiClientConnected();
     bool wantsHotspot;
 
     if (wifiConfigSettings.NeedsScan())
@@ -776,25 +855,41 @@ void HotspotManagerImpl::MaybeStartHotspot()
         this->UpdateKnownNetworks(connectableSsids, allAccessPoints);
 
         wantsHotspot = this->wifiConfigSettings.WantsHotspot(
-            this->ethernetConnected, connectableSsids, allAccessPointSsids);
+            this->ethernetConnected, wifiClientConnected, connectableSsids, allAccessPointSsids);
     }
     else
     {
         wantsHotspot = this->wifiConfigSettings.WantsHotspot(
-            this->ethernetConnected);
+            this->ethernetConnected, wifiClientConnected, std::vector<std::string>{}, std::vector<std::string>{});
     }
 
-    if (this->state == State::Monitoring && wantsHotspot)
+    if (!wantsHotspot)
     {
-        StartHotspot();
-    }
-    else
-    {
-        if ((!wantsHotspot) && (this->state == State::HotspotConnected || this->state == State::HotspotConnecting))
+        CancelConnectionTimeout();
+        if (this->state == State::HotspotConnected || this->state == State::HotspotConnecting)
         {
             StopHotspot();
         }
+        return;
     }
+
+    if (this->state == State::HotspotConnected || this->state == State::HotspotConnecting)
+    {
+        return;
+    }
+
+    if (this->state != State::Monitoring)
+    {
+        return;
+    }
+
+    if (wifiConfigSettings.NeedsConnectionTimeout() && !connectionTimeoutElapsed)
+    {
+        StartConnectionTimeoutIfNeeded();
+        return;
+    }
+
+    StartHotspot();
 }
 
 void HotspotManagerImpl::EnableHotspot()
@@ -862,6 +957,8 @@ void HotspotManagerImpl::StartHotspot()
             connection["id"] = sdbus::Variant(PIPEDAL_HOTSPOT_NAME);
             connection["interface-name"] = sdbus::Variant(wlanDevice->Interface());
             connection["uuid"] = sdbus::Variant(serviceConfiguration.uuid);
+            // Announce/resolve mDNS on the hotspot so pipedal.local is visible to iPad/iOS.
+            connection["mdns"] = sdbus::Variant(int32_t(2)); // NM_SETTING_CONNECTION_MDNS_YES
 
             std::map<std::string, sdbus::Variant> &wireless = settings["802-11-wireless"];
 
@@ -907,8 +1004,8 @@ void HotspotManagerImpl::StartHotspot()
 
             settings["ipv4"]["address-data"] = sdbus::Variant(
                 std::vector<std::map<std::string, sdbus::Variant>>{
-                    {{"address", sdbus::Variant("192.168.60.1")},
-                     {"prefix", sdbus::Variant(uint32_t(24))}}});
+                    {{"address", sdbus::Variant(kPipedalHotspotIpv4)},
+                     {"prefix", sdbus::Variant(kPipedalHotspotPrefixLength)}}});
             // For method=shared, NM provides DHCP; explicit DHCP client options on this device are not applicable.
             // settings["ipv4"]["dhcp-options"] = sdbus::Variant(std::vector<std::string>{
             //     "option:classless-static-route,192.168.60.0/24,0.0.0.0,0.0.0.0/0,192.168.60.1"});

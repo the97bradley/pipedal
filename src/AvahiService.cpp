@@ -33,9 +33,11 @@
 #include <avahi-common/malloc.h>
 #include <avahi-common/error.h>
 #include <avahi-common/timeval.h>
+#include <avahi-common/address.h>
 #include <unistd.h>
 #include "Lv2Log.hpp"
 #include "ss.hpp"
+#include "HotspotConstants.hpp"
 #include <chrono>
 
 using namespace pipedal;
@@ -79,13 +81,14 @@ void AvahiService::Announce(
     const std::string &name,
     const std::string &instanceId,
     const std::string &mdnsName,
-    bool wait)
+    bool wait,
+    const std::string &hotspotIpv4)
 {
     if (terminated)
         return;
-    // We should update an existing group if the name doesn't change.
-    // but in practice, the name is the only thing that's going to change without restarting the pipedal server.
-    if (this->serviceName == name)
+    // Re-announce when the service name or hotspot address changes so pipedal.local
+    // is published on the auto-hotspot gateway address.
+    if (this->serviceName == name && this->hotspotIpv4 == hotspotIpv4)
     {
         return;
     }
@@ -97,6 +100,7 @@ void AvahiService::Announce(
         this->instanceId = instanceId;
         this->mdnsName = mdnsName;
         this->serviceName = name;
+        this->hotspotIpv4 = hotspotIpv4;
 
         started = true;
         makeAnnouncement = true;
@@ -116,6 +120,7 @@ void AvahiService::Announce(
         this->instanceId = instanceId;
         this->mdnsName = mdnsName;
         this->serviceName = name;
+        this->hotspotIpv4 = hotspotIpv4;
         this->makeAnnouncement = true;
 
         // we've requested a start but have not created the group.
@@ -320,6 +325,30 @@ void AvahiService::create_group(AvahiClient *c)
                 goto collision;
             Lv2Log::error(SS("Failed to add _pipedal._tcp service: " << avahi_strerror(ret)));
             goto fail;
+        }
+
+        if (!hotspotIpv4.empty())
+        {
+            AvahiAddress addr;
+            if (avahi_address_parse(hotspotIpv4.c_str(), AVAHI_PROTO_INET, &addr))
+            {
+                ret = avahi_entry_group_add_address(
+                    group,
+                    AVAHI_IF_UNSPEC,
+                    AVAHI_PROTO_INET,
+                    (AvahiPublishFlags)0,
+                    kPipedalHotspotMdnsName,
+                    &addr);
+                if (ret < 0 && ret != AVAHI_ERR_COLLISION)
+                {
+                    Lv2Log::warning(SS("Failed to publish " << kPipedalHotspotMdnsName
+                                                            << ".local on the hotspot: " << avahi_strerror(ret)));
+                }
+                else if (ret >= 0)
+                {
+                    Lv2Log::info(SS("Published " << kPipedalHotspotMdnsName << ".local -> " << hotspotIpv4));
+                }
+            }
         }
 
         /* Tell the server to register the service */
