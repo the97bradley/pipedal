@@ -22,6 +22,7 @@ export default class BluetoothConfigSettings {
         this.valid = !!input.valid;
         this.enable = !!input.enable;
         this.deviceName = input.deviceName || "pipedal";
+        this.pin = input.pin || "";
         return this;
     }
     clone(): BluetoothConfigSettings {
@@ -30,6 +31,7 @@ export default class BluetoothConfigSettings {
     valid: boolean = false;
     enable: boolean = true;
     deviceName: string = "pipedal";
+    pin: string = "";
 
     getSummaryText() {
         if (!this.valid) {
@@ -38,6 +40,6 @@ export default class BluetoothConfigSettings {
         if (!this.enable) {
             return "Disabled.";
         }
-        return "Always on. (" + this.deviceName + " · 172.21.0.1)";
+        return "Always on, PIN required. (" + this.deviceName + " · 172.21.0.1)";
     }
 }

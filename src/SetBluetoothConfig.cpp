@@ -63,6 +63,7 @@ void pipedal::SetBluetoothConfig(const BluetoothConfigSettings &settings)
     {
         copy.deviceName_ = "pipedal";
     }
+    copy.EnsurePin();
     copy.Save();
 
     EnsureServiceUnitInstalled();
@@ -112,6 +113,7 @@ void pipedal::OnBluetoothInstall()
     {
         settings.deviceName_ = "pipedal";
     }
+    settings.EnsurePin();
     SetBluetoothConfig(settings);
 }
 

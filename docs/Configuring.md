@@ -166,9 +166,9 @@ at a time. Bluetooth remote access is the default iPad path: a second, separate 
 Wi-Fi (or cellular) for internet, and still open the PiPedal web UI over Bluetooth.
 
 It is enabled automatically when PiPedal is installed and a Bluetooth adapter is present, and it stays on across reboots.
-You can change the advertised name from **Settings → Bluetooth remote**, or from the command line:
+Every new device must enter a pairing PIN (4–8 digits). Change the name or PIN from **Settings → Bluetooth remote**, or:
 
-    sudo pipedalconfig --enable-bluetooth
+    sudo pipedalconfig --enable-bluetooth pipedal 123456
 
 The Pi advertises a Bluetooth NAP named `pipedal` (you can change the name). It has a fixed address of **http://172.21.0.1**.
 DHCP on that link does **not** hand out a default route, so the iPad keeps using Wi-Fi for internet.
@@ -177,13 +177,13 @@ DHCP on that link does **not** hand out a default route, so the iPad keeps using
 
 1. Leave the iPad on your internet Wi-Fi (or cellular).
 2. Open **Settings → Bluetooth** and wait for **pipedal** (or the name you chose) to appear.
-3. Tap it to pair. Tap **Pair** if iPadOS asks.
+3. Tap it to pair. Enter the Bluetooth PIN when iPadOS asks for a passcode. Pairing is rejected without the PIN.
 4. When it shows **Connected**, tap the **ⓘ** next to the name. If iPadOS offers a network / Internet / Ethernet control, turn it on.
    An **Ethernet** item may also appear in the main Settings list. Leave it on Automatic (DHCP).
 5. Open Safari and go to **http://172.21.0.1**. If mDNS works on the PAN, **http://pipedal.local** also works.
 
-Pairing is only needed once. After that the iPad should reconnect when both devices are on. Bluetooth is for the web UI only,
-not for audio. It is slower than Wi-Fi, which is fine for knobs and presets.
+Pairing (and the PIN) is only needed once per device. After that the iPad should reconnect when both devices are on.
+Bluetooth is for the web UI only, not for audio. It is slower than Wi-Fi, which is fine for knobs and presets.
 
 If the PAN does not come up, forget the device on the iPad and pair again. On the Pi, `systemctl status pipedal-bt-nap`
 shows whether the Bluetooth network service is running.

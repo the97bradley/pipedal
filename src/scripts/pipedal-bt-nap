@@ -16,34 +16,55 @@ DHCP_END="172.21.0.50"
 RUN_DIR="/run/pipedal"
 DNSMASQ_CONF="${RUN_DIR}/bt-dnsmasq.conf"
 DNSMASQ_LEASES="${RUN_DIR}/bt-dnsmasq.leases"
+PIN_FILE="${RUN_DIR}/bt-pin"
 AGENT_PID=""
+AGENT_READER_PID=""
 TRUST_PID=""
 KEEPALIVE_PID=""
 DNSMASQ_PID=""
 BTCTL_PID=""
+NAME=""
+PIN=""
 
 log() {
     echo "pipedal-bt-nap: $*" >&2
 }
 
-device_name() {
-    local name=""
-    if [[ -f "$CONFIG_JSON" ]]; then
-        name="$(python3 - <<'PY' 2>/dev/null
-import json,sys
-try:
-    with open("/var/pipedal/config/bluetoothConfig.json") as f:
-        data=json.load(f)
-    print((data.get("deviceName") or "pipedal").strip() or "pipedal")
-except Exception:
-    print("pipedal")
+load_config() {
+    local loaded
+    loaded="$(python3 - <<'PY' 2>/dev/null
+import json, os, secrets
+path = "/var/pipedal/config/bluetoothConfig.json"
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+name = (data.get("deviceName") or "pipedal").strip() or "pipedal"
+pin = str(data.get("pin") or "").strip()
+if not (pin.isdigit() and 4 <= len(pin) <= 8):
+    pin = f"{secrets.randbelow(1000000):06d}"
+    data["deviceName"] = name
+    data["pin"] = pin
+    data["enable"] = True
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f)
+print(name)
+print(pin)
 PY
 )"
+    NAME="$(printf '%s\n' "$loaded" | sed -n '1p')"
+    PIN="$(printf '%s\n' "$loaded" | sed -n '2p')"
+    if [[ -z "$NAME" ]]; then
+        NAME="pipedal"
     fi
-    if [[ -z "$name" ]]; then
-        name="pipedal"
+    if [[ ! "$PIN" =~ ^[0-9]{4,8}$ ]]; then
+        log "failed to load a valid Bluetooth PIN"
+        exit 1
     fi
-    printf '%s' "$name"
 }
 
 cleanup() {
@@ -52,6 +73,9 @@ cleanup() {
     fi
     if [[ -n "${AGENT_PID}" ]]; then
         kill "${AGENT_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${AGENT_READER_PID}" ]]; then
+        kill "${AGENT_READER_PID}" >/dev/null 2>&1 || true
     fi
     if [[ -n "${TRUST_PID}" ]]; then
         kill "${TRUST_PID}" >/dev/null 2>&1 || true
@@ -87,8 +111,8 @@ if ! command -v dnsmasq >/dev/null 2>&1; then
     exit 1
 fi
 
-NAME="$(device_name)"
-log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX})"
+load_config
+log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (PIN required; stored in ${CONFIG_JSON})"
 
 systemctl start bluetooth >/dev/null 2>&1 || true
 
@@ -116,6 +140,13 @@ if command -v btmgmt >/dev/null 2>&1; then
     btmgmt pairable on >/dev/null 2>&1 || true
     btmgmt bredr on >/dev/null 2>&1 || true
     btmgmt name "$NAME" >/dev/null 2>&1 || true
+    # Legacy PIN pairing so the connecting device must type the PIN.
+    # SSP numeric-comparison would only show a random number, not our PIN.
+    btmgmt ssp off >/dev/null 2>&1 || true
+    btmgmt io-cap 4 >/dev/null 2>&1 || true
+fi
+if command -v hciconfig >/dev/null 2>&1; then
+    hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
 fi
 
 ip link add name "$BRIDGE" type bridge 2>/dev/null || true
@@ -142,17 +173,39 @@ if [[ -z "$registered" ]]; then
 fi
 log "registered NAP on ${registered}"
 
-# Pairing agent: prefer bt-agent (bluez-tools); otherwise keep bluetoothctl open.
+mkdir -p "$RUN_DIR"
+umask 077
+printf '* %s\n' "$PIN" > "$PIN_FILE"
+chmod 600 "$PIN_FILE"
+
+# Pairing agent: require the configured PIN from every new device.
 if command -v bt-agent >/dev/null 2>&1; then
-    bt-agent -c NoInputNoOutput >/dev/null 2>&1 &
+    bt-agent -c KeyboardDisplay -p "$PIN_FILE" >/dev/null 2>&1 &
     AGENT_PID=$!
+    log "PIN agent: bt-agent KeyboardDisplay"
 else
-    # Keep stdin open so default-agent stays registered.
-    coproc BTCTL { bluetoothctl --agent NoInputNoOutput; }
-    BTCTL_PID="${BTCTL_PID:-}"
+    coproc BTCTL { stdbuf -oL bluetoothctl --agent KeyboardDisplay; }
     if [[ -n "${BTCTL[1]:-}" ]]; then
         printf 'power on\nsystem-alias %s\npairable on\ndiscoverable on\ndefault-agent\n' "$NAME" >&"${BTCTL[1]}"
     fi
+    (
+        while IFS= read -r line <&"${BTCTL[0]}"; do
+            low="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+            if [[ "$low" == *"enter pin"* || "$low" == *"pin code"* || "$low" == *"enter passkey"* ]]; then
+                printf '%s\n' "$PIN" >&"${BTCTL[1]}"
+            elif [[ "$low" == *"confirm passkey"* || "$low" == *"request confirmation"* ]]; then
+                if [[ "$line" == *"$PIN"* ]]; then
+                    printf 'yes\n' >&"${BTCTL[1]}"
+                else
+                    printf 'no\n' >&"${BTCTL[1]}"
+                fi
+            elif [[ "$low" == *"authorize"* ]]; then
+                printf 'yes\n' >&"${BTCTL[1]}"
+            fi
+        done
+    ) &
+    AGENT_READER_PID=$!
+    log "PIN agent: bluetoothctl KeyboardDisplay"
 fi
 
 # Auto-trust anything that successfully pairs so the iPad can reconnect later.
@@ -179,7 +232,6 @@ TRUST_PID=$!
 ) &
 KEEPALIVE_PID=$!
 
-mkdir -p "$RUN_DIR"
 cat > "$DNSMASQ_CONF" <<EOF
 # Isolated PAN: no default route, so the iPad keeps using Wi-Fi for internet.
 interface=${BRIDGE}
@@ -194,7 +246,7 @@ EOF
 dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
 DNSMASQ_PID=$!
 
-log "ready. iPad: Settings > Bluetooth > pair '${NAME}', then open http://${ADDR} (Wi-Fi can stay on internet)."
+log "ready. iPad: Settings > Bluetooth > pair '${NAME}', enter PIN, then open http://${ADDR} (Wi-Fi can stay on internet)."
 
 wait "$DNSMASQ_PID"
 exit $?

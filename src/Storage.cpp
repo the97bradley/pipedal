@@ -1713,6 +1713,11 @@ void Storage::SetBluetoothConfigSettings(const BluetoothConfigSettings &bluetoot
     {
         copyToSave.deviceName_ = "pipedal";
     }
+    if (copyToSave.pin_.empty())
+    {
+        copyToSave.pin_ = this->bluetoothConfigSettings.pin_;
+    }
+    copyToSave.EnsurePin();
     copyToSave.Save();
     copyToSave.valid_ = copyToSave.HasBluetoothAdapter();
     this->bluetoothConfigSettings = copyToSave;

@@ -18,7 +18,7 @@ Things you can do with pipedalconfig:
      
      - enable or disable the Wi-Fi hotspot.
 
-     - Bluetooth remote access is on by default (`--enable-bluetooth` / `--disable-bluetooth`) so an iPad can stay on Wi-Fi for internet.
+     - Bluetooth remote access is on by default (`--enable-bluetooth` / `--disable-bluetooth`) so an iPad can stay on Wi-Fi for internet. Every new device must enter the pairing PIN.
      
 Run `pipedalconfig --help` for available options.
 

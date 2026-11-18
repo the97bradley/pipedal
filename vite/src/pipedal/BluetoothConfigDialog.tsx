@@ -39,8 +39,11 @@ export interface BluetoothConfigProps {
 export interface BluetoothConfigState {
     enabled: boolean;
     name: string;
+    pin: string;
     nameError: boolean;
     nameErrorMessage: string;
+    pinError: boolean;
+    pinErrorMessage: string;
 }
 
 const BluetoothConfigDialog =
@@ -51,8 +54,11 @@ const BluetoothConfigDialog =
             this.state = {
                 enabled: this.props.bluetoothConfigSettings.enable !== false,
                 name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
+                pin: this.props.bluetoothConfigSettings.pin || "",
                 nameError: false,
-                nameErrorMessage: ""
+                nameErrorMessage: "",
+                pinError: false,
+                pinErrorMessage: ""
             };
         }
 
@@ -61,14 +67,18 @@ const BluetoothConfigDialog =
                 this.setState({
                     enabled: this.props.bluetoothConfigSettings.enable !== false,
                     name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
+                    pin: this.props.bluetoothConfigSettings.pin || "",
                     nameError: false,
-                    nameErrorMessage: ""
+                    nameErrorMessage: "",
+                    pinError: false,
+                    pinErrorMessage: ""
                 });
             }
         }
 
         handleOk() {
             let name = (this.state.name || "").trim();
+            let pin = (this.state.pin || "").trim();
             if (this.state.enabled) {
                 if (name.length === 0) {
                     this.setState({ nameError: true, nameErrorMessage: "* Required" });
@@ -82,11 +92,16 @@ const BluetoothConfigDialog =
                     this.setState({ nameError: true, nameErrorMessage: "Use letters, numbers, space, - or _" });
                     return;
                 }
+                if (!/^[0-9]{4,8}$/.test(pin)) {
+                    this.setState({ pinError: true, pinErrorMessage: "4 to 8 digits, required for every new device" });
+                    return;
+                }
             }
             let settings = new BluetoothConfigSettings();
             settings.valid = true;
             settings.enable = this.state.enabled;
             settings.deviceName = name.length ? name : "pipedal";
+            settings.pin = pin;
             this.props.onOk(settings);
         }
 
@@ -123,6 +138,19 @@ const BluetoothConfigDialog =
                             onChange={(e) => this.setState({ name: e.target.value, nameError: false, nameErrorMessage: "" })}
                             disabled={!this.state.enabled}
                         />
+                        <TextField
+                            autoComplete="off"
+                            id="bt_pin"
+                            margin="dense"
+                            label="Pairing PIN"
+                            fullWidth
+                            value={this.state.pin}
+                            error={this.state.pinError}
+                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Required on every new device. 4–8 digits. Already-paired devices reconnect without it."}
+                            inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 8 }}
+                            onChange={(e) => this.setState({ pin: e.target.value, pinError: false, pinErrorMessage: "" })}
+                            disabled={!this.state.enabled}
+                        />
                         <Typography variant="body2" color="textSecondary" style={{ marginTop: 16, lineHeight: "1.45em" }}>
                             Bluetooth is the default iPad connection and stays on whenever the Pi is running.
                             It is a second network next to Wi-Fi, so the iPad can stay on venue/home Wi-Fi
@@ -132,7 +160,7 @@ const BluetoothConfigDialog =
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
                             <ol style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0 }}>
                                 <li>On the iPad open <b>Settings → Bluetooth</b> and leave Wi-Fi on your internet network.</li>
-                                <li>Wait for <b>{this.state.name || "pipedal"}</b> to appear, then tap it to pair. Tap Pair if asked.</li>
+                                <li>Wait for <b>{this.state.name || "pipedal"}</b> to appear, then tap it to pair. Enter PIN <b>{this.state.pin || "••••"}</b> when iPadOS asks for a passcode.</li>
                                 <li>When it says Connected, tap the <b>ⓘ</b> next to the name. If iPadOS shows a network /
                                     Internet / Ethernet control, turn it on. An <b>Ethernet</b> item may also appear in the
                                     main Settings list — leave it on Automatic (DHCP).</li>

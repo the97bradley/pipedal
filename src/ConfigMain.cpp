@@ -1430,11 +1430,12 @@ static void PrintHelp()
 
         << HangingIndent() << "    --disable-hotspot\tDisabled the Wi-Fi hotspot."
         << "\n\n"
-        << HangingIndent() << "    --enable-bluetooth\t [device-name]"
-        << "\n\nBluetooth remote is on by default. Use this to re-enable it or set the advertised name. "
+        << HangingIndent() << "    --enable-bluetooth\t [device-name] [pin]"
+        << "\n\nBluetooth remote is on by default. Use this to re-enable it, set the advertised name, "
+        << "or set the pairing PIN (4-8 digits). Every new device must enter the PIN. "
         << "An iPad or phone can stay on Wi-Fi for internet and still open PiPedal at http://172.21.0.1. "
-        << "On the iPad: Settings → Bluetooth → pair the device, then turn on the network/Ethernet control "
-        << "if iPadOS shows one."
+        << "On the iPad: Settings → Bluetooth → pair the device, enter the PIN, then turn on the "
+        << "network/Ethernet control if iPadOS shows one."
         << "\n\n"
         << HangingIndent() << "    --disable-bluetooth\tDisable the Bluetooth network."
         << "\n\n"
@@ -1914,13 +1915,17 @@ int main(int argc, char **argv)
             settings.Load();
             settings.enable_ = true;
             auto argv = parser.Arguments();
-            if (argv.size() > 1)
+            if (argv.size() > 2)
             {
-                throw std::runtime_error("Too many arguments. Usage: pipedalconfig --enable-bluetooth [device-name]");
+                throw std::runtime_error("Too many arguments. Usage: pipedalconfig --enable-bluetooth [device-name] [pin]");
             }
-            if (argv.size() == 1)
+            if (argv.size() >= 1)
             {
                 settings.deviceName_ = argv[0];
+            }
+            if (argv.size() == 2)
+            {
+                settings.pin_ = argv[1];
             }
             SetBluetoothConfig(settings);
             FileSystemSync();

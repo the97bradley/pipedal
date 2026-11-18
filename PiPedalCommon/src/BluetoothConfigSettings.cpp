@@ -26,6 +26,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <cctype>
+#include <cstdio>
+#include <random>
 
 using namespace pipedal;
 using namespace std;
@@ -37,7 +39,45 @@ JSON_MAP_BEGIN(BluetoothConfigSettings)
     JSON_MAP_REFERENCE(BluetoothConfigSettings, valid)
     JSON_MAP_REFERENCE(BluetoothConfigSettings, enable)
     JSON_MAP_REFERENCE(BluetoothConfigSettings, deviceName)
+    JSON_MAP_REFERENCE(BluetoothConfigSettings, pin)
 JSON_MAP_END()
+
+namespace {
+
+bool IsValidBluetoothPin(const std::string &pin)
+{
+    if (pin.size() < 4 || pin.size() > 8)
+    {
+        return false;
+    }
+    for (char c : pin)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(c)))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string GenerateBluetoothPin()
+{
+    std::random_device rd;
+    std::uniform_int_distribution<int> dist(0, 999999);
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%06d", dist(rd));
+    return buf;
+}
+
+} // namespace
+
+void BluetoothConfigSettings::EnsurePin()
+{
+    if (!IsValidBluetoothPin(pin_))
+    {
+        pin_ = GenerateBluetoothPin();
+    }
+}
 
 BluetoothConfigSettings::BluetoothConfigSettings()
 {
@@ -108,6 +148,11 @@ void BluetoothConfigSettings::Save()
     if (toSave.deviceName_.size() > 32)
     {
         throw std::runtime_error("Bluetooth device name is longer than 32 characters.");
+    }
+    toSave.EnsurePin();
+    if (!IsValidBluetoothPin(toSave.pin_))
+    {
+        throw std::runtime_error("Bluetooth PIN must be 4 to 8 digits.");
     }
 
     auto directory = CONFIG_PATH.parent_path();

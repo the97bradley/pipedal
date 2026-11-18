@@ -128,7 +128,7 @@ set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
 
 
 
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libicu-dev ,lv2-dev,iw, ffmpeg, authbind, curl, gpg, alsa-base| pipewire, alsa-utils, bluez, dnsmasq-base | dnsmasq")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libicu-dev ,lv2-dev,iw, ffmpeg, authbind, curl, gpg, alsa-base| pipewire, alsa-utils, bluez, bluez-tools, dnsmasq-base | dnsmasq")
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE ${DEBIAN_ARCHITECTURE})
 set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
