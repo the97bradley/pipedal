@@ -1,0 +1,49 @@
+# Build a Raspberry Pi OS / Debian arm64 .deb.
+# On a Mac: docker/build-deb.sh
+#
+# Apple Silicon is native linux/arm64. Intel Macs qemu-emulate it (slow).
+
+FROM debian:trixie AS build
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    CMAKE_BUILD_TYPE=Release
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg \
+        cmake ninja-build build-essential git pkg-config python3 gzip file \
+        dpkg-dev fakeroot binutils \
+        nodejs npm \
+        liblilv-dev libboost-dev \
+        libsystemd-dev catch2 \
+        libasound2-dev uuid-dev \
+        authbind libavahi-client-dev libnm-dev libicu-dev \
+        libsdbus-c++-dev libsdbus-c++-bin \
+        libzip-dev libzstd-dev \
+        libgoogle-perftools-dev \
+        libpipewire-0.3-dev libbz2-dev libssl-dev librsvg2-dev \
+        libnl-3-dev libnl-genl-3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+RUN git submodule update --init --recursive || true \
+    && if [ ! -f modules/SQLiteCpp/CMakeLists.txt ]; then \
+         echo "Submodules are missing. On the host run: git submodule update --init --recursive" >&2; \
+         exit 1; \
+       fi
+
+WORKDIR /src/vite
+RUN npm install
+
+WORKDIR /src
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DPIPEDAL_EXCLUDE_TESTS=ON \
+    && cmake --build build -j"$(nproc)" \
+    && cmake --build build --target package \
+    && mkdir -p /out \
+    && cp -a build/*.deb /out/
+
+FROM scratch AS export
+COPY --from=build /out /

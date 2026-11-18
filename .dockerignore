@@ -1,0 +1,10 @@
+build
+dist-deb
+vite/node_modules
+vite/dist
+**/*.deb
+**/.DS_Store
+**/CMakeFiles
+Testing
+core
+vg.output
