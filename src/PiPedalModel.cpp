@@ -3242,6 +3242,24 @@ void PiPedalModel::StartHotspotMonitoring()
     SetThreadName("main");
 
     this->hotspotManager->Open();
+
+    try
+    {
+        BluetoothConfigSettings bluetooth = GetBluetoothConfigSettings();
+        if (bluetooth.HasBluetoothAdapter() && !bluetooth.enable_)
+        {
+            bluetooth.enable_ = true;
+            if (bluetooth.deviceName_.empty())
+            {
+                bluetooth.deviceName_ = "pipedal";
+            }
+            SetBluetoothConfigSettings(bluetooth);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        Lv2Log::warning(SS("Bluetooth remote could not be enabled: " << e.what()));
+    }
 }
 
 void PiPedalModel::WaitForAudioDeviceToComeOnline()

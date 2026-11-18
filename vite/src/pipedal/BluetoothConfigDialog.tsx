@@ -49,7 +49,7 @@ const BluetoothConfigDialog =
         constructor(props: BluetoothConfigProps) {
             super(props);
             this.state = {
-                enabled: this.props.bluetoothConfigSettings.enable,
+                enabled: this.props.bluetoothConfigSettings.enable !== false,
                 name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
                 nameError: false,
                 nameErrorMessage: ""
@@ -59,7 +59,7 @@ const BluetoothConfigDialog =
         componentDidUpdate(prevProps: BluetoothConfigProps) {
             if (this.props.open && !prevProps.open) {
                 this.setState({
-                    enabled: this.props.bluetoothConfigSettings.enable,
+                    enabled: this.props.bluetoothConfigSettings.enable !== false,
                     name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
                     nameError: false,
                     nameErrorMessage: ""
@@ -109,7 +109,7 @@ const BluetoothConfigDialog =
                                     onChange={(e) => this.setState({ enabled: e.target.checked })}
                                 />
                             }
-                            label="Enable Bluetooth connection"
+                            label="Bluetooth remote (on by default)"
                         />
                         <TextField
                             autoComplete="off"
@@ -124,8 +124,9 @@ const BluetoothConfigDialog =
                             disabled={!this.state.enabled}
                         />
                         <Typography variant="body2" color="textSecondary" style={{ marginTop: 16, lineHeight: "1.45em" }}>
-                            Bluetooth is a second network next to Wi-Fi. The iPad can stay on venue/home Wi-Fi
-                            (or cellular) for internet, and still open PiPedal over Bluetooth.
+                            Bluetooth is the default iPad connection and stays on whenever the Pi is running.
+                            It is a second network next to Wi-Fi, so the iPad can stay on venue/home Wi-Fi
+                            (or cellular) for internet and still open PiPedal over Bluetooth.
                         </Typography>
                         <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>

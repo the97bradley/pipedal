@@ -18,6 +18,7 @@ DNSMASQ_CONF="${RUN_DIR}/bt-dnsmasq.conf"
 DNSMASQ_LEASES="${RUN_DIR}/bt-dnsmasq.leases"
 AGENT_PID=""
 TRUST_PID=""
+KEEPALIVE_PID=""
 DNSMASQ_PID=""
 BTCTL_PID=""
 
@@ -54,6 +55,9 @@ cleanup() {
     fi
     if [[ -n "${TRUST_PID}" ]]; then
         kill "${TRUST_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${KEEPALIVE_PID}" ]]; then
+        kill "${KEEPALIVE_PID}" >/dev/null 2>&1 || true
     fi
     if [[ -n "${BTCTL_PID}" ]]; then
         kill "${BTCTL_PID}" >/dev/null 2>&1 || true
@@ -161,6 +165,19 @@ fi
     done
 ) &
 TRUST_PID=$!
+
+# Stay discoverable/pairable. Something else (or the 180s BlueZ default) can
+# otherwise turn the adapter quiet after boot.
+(
+    while true; do
+        bluetoothctl power on >/dev/null 2>&1 || true
+        bluetoothctl pairable on >/dev/null 2>&1 || true
+        bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
+        bluetoothctl discoverable on >/dev/null 2>&1 || true
+        sleep 20
+    done
+) &
+KEEPALIVE_PID=$!
 
 mkdir -p "$RUN_DIR"
 cat > "$DNSMASQ_CONF" <<EOF

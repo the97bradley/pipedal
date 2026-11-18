@@ -683,9 +683,9 @@ const SettingsDialog = withStyles(
                                     (
                                         <div>
                                             <Typography display="block" variant="body1" color="textSecondary" style={{ paddingLeft: 24, paddingBottom: 8 }}>
-                                                Select and configure an audio device. You may optionally configure MIDI inputs, a Wi-Fi Auto-Hotspot, and a Bluetooth remote.
-                                                Bluetooth lets an iPad stay on Wi-Fi for internet while controlling PiPedal. The Auto-Hotspot feature allows you to connect
-                                                even if you don't have access to a Wi-Fi router.
+                                                Select and configure an audio device. You may optionally configure MIDI inputs and a Wi-Fi Auto-Hotspot.
+                                                Bluetooth remote is on by default so an iPad can stay on Wi-Fi for internet while controlling PiPedal.
+                                                The Auto-Hotspot feature allows you to connect even if you don't have access to a Wi-Fi router.
                                             </Typography>
                                             <Typography display="block" variant="body1" color="textSecondary" style={{ paddingLeft: 24, paddingBottom: 8 }}>
                                                 Access and modify these settings later by selecting the <i>Settings</i> menu item on the main menu.

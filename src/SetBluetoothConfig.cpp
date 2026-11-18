@@ -102,10 +102,17 @@ void pipedal::OnBluetoothInstall()
     EnsureServiceUnitInstalled();
     BluetoothConfigSettings settings;
     settings.Load();
-    if (settings.enable_)
+    if (!settings.HasBluetoothAdapter())
     {
-        SetBluetoothConfig(settings);
+        Lv2Log::info("No Bluetooth adapter found; Bluetooth remote not started.");
+        return;
     }
+    settings.enable_ = true;
+    if (settings.deviceName_.empty())
+    {
+        settings.deviceName_ = "pipedal";
+    }
+    SetBluetoothConfig(settings);
 }
 
 void pipedal::OnBluetoothUninstall()

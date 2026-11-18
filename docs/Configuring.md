@@ -162,10 +162,11 @@ away from home with PiPedal.
 ## Bluetooth remote (iPad stays on internet Wi-Fi)
 
 Connecting an iPad to PiPedal's Wi-Fi hotspot takes the iPad off the internet, because iPadOS can only join one Wi-Fi network
-at a time. Bluetooth remote access is a second, separate network so the iPad can stay on venue or home Wi-Fi (or cellular)
-for internet, and still open the PiPedal web UI over Bluetooth.
+at a time. Bluetooth remote access is the default iPad path: a second, separate network so the iPad can stay on venue or home
+Wi-Fi (or cellular) for internet, and still open the PiPedal web UI over Bluetooth.
 
-Enable it from **Settings → Bluetooth remote**, or from the command line:
+It is enabled automatically when PiPedal is installed and a Bluetooth adapter is present, and it stays on across reboots.
+You can change the advertised name from **Settings → Bluetooth remote**, or from the command line:
 
     sudo pipedalconfig --enable-bluetooth
 

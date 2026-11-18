@@ -28,7 +28,7 @@ export default class BluetoothConfigSettings {
         return new BluetoothConfigSettings().deserialize(this);
     }
     valid: boolean = false;
-    enable: boolean = false;
+    enable: boolean = true;
     deviceName: string = "pipedal";
 
     getSummaryText() {
@@ -38,6 +38,6 @@ export default class BluetoothConfigSettings {
         if (!this.enable) {
             return "Disabled.";
         }
-        return "Enabled. (" + this.deviceName + " · 172.21.0.1)";
+        return "Always on. (" + this.deviceName + " · 172.21.0.1)";
     }
 }

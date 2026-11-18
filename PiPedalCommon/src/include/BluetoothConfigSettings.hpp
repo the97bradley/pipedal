@@ -38,7 +38,9 @@ namespace pipedal {
 
         bool HasBluetoothAdapter() const;
 
-        bool enable_ = false;
+        // Bluetooth remote is the default iPad path and stays enabled
+        // whenever an adapter is present.
+        bool enable_ = true;
         std::string deviceName_ = "pipedal";
         bool valid_ = false;
 
