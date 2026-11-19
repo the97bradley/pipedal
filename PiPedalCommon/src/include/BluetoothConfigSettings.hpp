@@ -19,6 +19,7 @@
 #pragma once
 
 #include "json.hpp"
+#include <cstdint>
 #include <string>
 
 namespace pipedal {
@@ -28,6 +29,7 @@ namespace pipedal {
     inline constexpr const char *BLUETOOTH_NAP_BRIDGE = "pan0";
     inline constexpr const char *BLUETOOTH_NAP_ADDRESS = "172.21.0.1";
     inline constexpr const char *BLUETOOTH_NAP_SERVICE = "pipedal-bt-nap";
+    inline constexpr int BLUETOOTH_PAIRING_WINDOW_SECONDS = 120;
 
     class BluetoothConfigSettings {
     public:
@@ -46,6 +48,10 @@ namespace pipedal {
         // Required for every new pairing. Already-paired devices reconnect
         // without typing it again.
         std::string pin_;
+        // Adapter is hidden unless this is on. Stays on for
+        // BLUETOOTH_PAIRING_WINDOW_SECONDS after Save().
+        bool allowNewDevices_ = false;
+        int64_t pairingUntil_ = 0;
         bool valid_ = false;
 
         DECLARE_JSON_MAP(BluetoothConfigSettings);

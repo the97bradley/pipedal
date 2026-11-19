@@ -166,27 +166,33 @@ at a time. Bluetooth remote access is the default iPad path: a second, separate 
 Wi-Fi (or cellular) for internet, and still open the PiPedal web UI over Bluetooth.
 
 It is enabled automatically when PiPedal is installed and a Bluetooth adapter is present, and it stays on across reboots.
-Every new device must enter a pairing PIN (4–8 digits). Change the name or PIN from **Settings → Bluetooth remote**, or:
+The adapter is **hidden** until you open a pairing window. New devices must enter a 4–8 digit PIN. Change the name or PIN,
+or open a 2-minute pairing window, from **Settings → Bluetooth remote**, or:
 
     sudo pipedalconfig --enable-bluetooth pipedal 123456
+    sudo pipedalconfig --bluetooth-pair
 
-The Pi advertises a Bluetooth NAP named `pipedal` (you can change the name). It has a fixed address of **http://172.21.0.1**.
+The Pi offers a Bluetooth NAP named `pipedal` (you can change the name) at **http://172.21.0.1**.
 DHCP on that link does **not** hand out a default route, so the iPad keeps using Wi-Fi for internet.
+
+If the iPad is already on the same Wi-Fi as the Pi, use **http://pipedal.local** instead. You do not need Bluetooth.
+
+A Bluetooth “Connected” with no PIN is **not** the PAN. Forget that pairing and use the steps below.
+Safari over Bluetooth must use **http://172.21.0.1** (this link has no DNS).
 
 ### How the iPad connects
 
-1. Leave the iPad on your internet Wi-Fi (or cellular).
-2. Open **Settings → Bluetooth** and wait for **pipedal** (or the name you chose) to appear.
-3. Tap it to pair. Enter the Bluetooth PIN when iPadOS asks for a passcode. Pairing is rejected without the PIN.
-4. When it shows **Connected**, tap the **ⓘ** next to the name. If iPadOS offers a network / Internet / Ethernet control, turn it on.
-   An **Ethernet** item may also appear in the main Settings list. Leave it on Automatic (DHCP).
-5. Open Safari and go to **http://172.21.0.1**. If mDNS works on the PAN, **http://pipedal.local** also works.
+1. On the iPad, **Settings → Bluetooth → ⓘ next to pipedal → Forget This Device**.
+2. On the Pi web UI, **Settings → Bluetooth remote → Allow new devices (2 minutes) → OK**.
+3. Leave the iPad on internet Wi-Fi. Wait for **pipedal**, tap it, enter the PIN.
+4. Bluetooth “Connected” is not enough. Open the main Settings list. If **Ethernet** appears, leave it on Automatic (DHCP). That is the PAN.
+5. Safari: **http://172.21.0.1**.
 
-Pairing (and the PIN) is only needed once per device. After that the iPad should reconnect when both devices are on.
-Bluetooth is for the web UI only, not for audio. It is slower than Wi-Fi, which is fine for knobs and presets.
+Pairing is only needed once per device. After that the iPad can reconnect while the adapter stays hidden.
+Bluetooth is for the web UI only, not for audio.
 
-If the PAN does not come up, forget the device on the iPad and pair again. On the Pi, `systemctl status pipedal-bt-nap`
-shows whether the Bluetooth network service is running.
+If Ethernet never appears, the iPad did not join the PAN. Forget the device and pair again during the window.
+On the Pi, `systemctl status pipedal-bt-nap` and `ip -br link` (look for `bnep`) show whether the network came up.
 
 ### Connecting to PiPedal Using a Laptop when you are Away From Home
 

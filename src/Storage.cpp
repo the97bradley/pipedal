@@ -1725,6 +1725,7 @@ void Storage::SetBluetoothConfigSettings(const BluetoothConfigSettings &bluetoot
 
 BluetoothConfigSettings Storage::GetBluetoothConfigSettings()
 {
+    LoadBluetoothConfigSettings();
     this->bluetoothConfigSettings.valid_ = this->bluetoothConfigSettings.HasBluetoothAdapter();
     return this->bluetoothConfigSettings;
 }

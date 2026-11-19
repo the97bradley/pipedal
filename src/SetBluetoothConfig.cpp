@@ -86,9 +86,14 @@ void pipedal::SetBluetoothConfig(const BluetoothConfigSettings &settings)
         {
             throw std::runtime_error("Failed to enable the Bluetooth NAP service.");
         }
-        if (silentSysExec(SS(SYSTEMCTL_BIN " restart " << BLUETOOTH_NAP_SERVICE << ".service").c_str()) != EXIT_SUCCESS)
+        // Already running: the nap script polls bluetoothConfig.json, so a restart
+        // would drop an iPad PAN just to open a pairing window.
+        if (silentSysExec(SS(SYSTEMCTL_BIN " is-active --quiet " << BLUETOOTH_NAP_SERVICE << ".service").c_str()) != EXIT_SUCCESS)
         {
-            throw std::runtime_error("Failed to start the Bluetooth NAP service. Is BlueZ installed?");
+            if (silentSysExec(SS(SYSTEMCTL_BIN " restart " << BLUETOOTH_NAP_SERVICE << ".service").c_str()) != EXIT_SUCCESS)
+            {
+                throw std::runtime_error("Failed to start the Bluetooth NAP service. Is BlueZ installed?");
+            }
         }
     }
     else

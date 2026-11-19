@@ -1432,10 +1432,12 @@ static void PrintHelp()
         << "\n\n"
         << HangingIndent() << "    --enable-bluetooth\t [device-name] [pin]"
         << "\n\nBluetooth remote is on by default. Use this to re-enable it, set the advertised name, "
-        << "or set the pairing PIN (4-8 digits). Every new device must enter the PIN. "
-        << "An iPad or phone can stay on Wi-Fi for internet and still open PiPedal at http://172.21.0.1. "
-        << "On the iPad: Settings → Bluetooth → pair the device, enter the PIN, then turn on the "
-        << "network/Ethernet control if iPadOS shows one."
+        << "or set the pairing PIN (4-8 digits). The adapter is hidden until you open a pairing window. "
+        << "An iPad or phone can stay on Wi-Fi for internet and still open PiPedal at http://172.21.0.1."
+        << "\n\n"
+        << HangingIndent() << "    --bluetooth-pair"
+        << "\n\nMake the adapter visible for 2 minutes so a new device can pair. The PIN is required. "
+        << "Already-paired devices reconnect without this."
         << "\n\n"
         << HangingIndent() << "    --disable-bluetooth\tDisable the Bluetooth network."
         << "\n\n"
@@ -1587,7 +1589,7 @@ int main(int argc, char **argv)
     bool stop = false, start = false;
     bool enable = false, disable = false, restart = false;
     bool enable_hotspot = false, disable_hotspot = false;
-    bool enable_bluetooth = false, disable_bluetooth = false;
+    bool enable_bluetooth = false, disable_bluetooth = false, bluetooth_pair = false;
     bool enable_p2p = false, disable_p2p = false;
     bool list_p2p_channels = false;
     bool get_current_port = false;
@@ -1620,6 +1622,7 @@ int main(int argc, char **argv)
     parser.AddOption("--disable-hotspot", &disable_hotspot);
     parser.AddOption("--enable-bluetooth", &enable_bluetooth);
     parser.AddOption("--disable-bluetooth", &disable_bluetooth);
+    parser.AddOption("--bluetooth-pair", &bluetooth_pair);
     parser.AddOption("--home-network", &homeNetwork);
     parser.AddOption("--no-ethernet", &noEthernet);
     parser.AddOption("--no-wifi", &noWifi);
@@ -1634,7 +1637,7 @@ int main(int argc, char **argv)
         int actionCount =
             (!alsaDevice.empty()) + alsaDevices + help + get_current_port + install +
             uninstall + stop + start + enable + disable + enable_hotspot +
-            disable_hotspot + enable_bluetooth + disable_bluetooth + restart + enable_p2p + disable_p2p + list_p2p_channels +
+            disable_hotspot + enable_bluetooth + disable_bluetooth + bluetooth_pair + restart + enable_p2p + disable_p2p + list_p2p_channels +
             fix_permissions + list_wifi_country_codes;
 
         if (actionCount == 0 && portOption.length() != 0)
@@ -1927,6 +1930,16 @@ int main(int argc, char **argv)
             {
                 settings.pin_ = argv[1];
             }
+            SetBluetoothConfig(settings);
+            FileSystemSync();
+        }
+        else if (bluetooth_pair)
+        {
+            BluetoothConfigSettings settings;
+            settings.Load();
+            settings.enable_ = true;
+            settings.allowNewDevices_ = true;
+            settings.pairingUntil_ = 0;
             SetBluetoothConfig(settings);
             FileSystemSync();
         }

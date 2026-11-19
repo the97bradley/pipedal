@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.16.0)
 project(pipedal 
-    VERSION 2.0.112
+    VERSION 2.0.113
     DESCRIPTION "PiPedal Guitar Effect Pedal For Raspberry Pi"
     HOMEPAGE_URL "https://rerdavies.github.io/pipedal"
 )
 
-set (DISPLAY_VERSION "PiPedal v2.0.112-Release")
+set (DISPLAY_VERSION "PiPedal v2.0.113-Release")
 
 option(PIPEDAL_DISABLE_COPYRIGHT_BUILD "Skip generation of copyright notices (use on non-Debian distros)" OFF)
 option(PIPEDAL_EXCLUDE_TESTS "Exclude test targets from default build" OFF)

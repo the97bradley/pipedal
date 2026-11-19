@@ -4,11 +4,16 @@
 # Gives the iPad a second, Bluetooth-only IP path to the Pi so the iPad can
 # stay on Wi-Fi (or cellular) for internet. DHCP does not advertise a default
 # route; the PAN is 172.21.0.0/24 with the Pi at 172.21.0.1.
+#
+# Hidden unless Settings → Bluetooth remote → Allow new devices (2 minutes).
+# NAP is BR/EDR only. BLE Just Works pairing is disabled so a rando cannot
+# "connect" without a PIN and without a network.
 
 set -u
 
 CONFIG_JSON="/var/pipedal/config/bluetoothConfig.json"
 BRIDGE="pan0"
+DUMMY="pan0-dummy"
 ADDR="172.21.0.1"
 PREFIX="24"
 DHCP_START="172.21.0.10"
@@ -17,14 +22,18 @@ RUN_DIR="/run/pipedal"
 DNSMASQ_CONF="${RUN_DIR}/bt-dnsmasq.conf"
 DNSMASQ_LEASES="${RUN_DIR}/bt-dnsmasq.leases"
 PIN_FILE="${RUN_DIR}/bt-pin"
+PAIRING_FLAG="${RUN_DIR}/bt-pairing-on"
 AGENT_PID=""
 AGENT_READER_PID=""
 TRUST_PID=""
 KEEPALIVE_PID=""
+NETWORK_PID=""
 DNSMASQ_PID=""
 BTCTL_PID=""
 NAME=""
 PIN=""
+PAIRING_UNTIL=0
+PAIRING_ACTIVE=0
 
 log() {
     echo "pipedal-bt-nap: $*" >&2
@@ -33,7 +42,7 @@ log() {
 load_config() {
     local loaded
     loaded="$(python3 - <<'PY' 2>/dev/null
-import json, os, secrets
+import json, os, secrets, time
 path = "/var/pipedal/config/bluetoothConfig.json"
 data = {}
 if os.path.exists(path):
@@ -44,20 +53,39 @@ if os.path.exists(path):
         data = {}
 name = (data.get("deviceName") or "pipedal").strip() or "pipedal"
 pin = str(data.get("pin") or "").strip()
+changed = False
 if not (pin.isdigit() and 4 <= len(pin) <= 8):
     pin = f"{secrets.randbelow(1000000):06d}"
     data["deviceName"] = name
     data["pin"] = pin
     data["enable"] = True
+    changed = True
+now = int(time.time())
+until = 0
+try:
+    until = int(data.get("pairingUntil") or 0)
+except Exception:
+    until = 0
+allow = bool(data.get("allowNewDevices"))
+if allow and until <= now:
+    data["allowNewDevices"] = False
+    data["pairingUntil"] = 0
+    until = 0
+    changed = True
+elif not allow:
+    until = 0
+if changed:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f)
 print(name)
 print(pin)
+print(until)
 PY
 )"
     NAME="$(printf '%s\n' "$loaded" | sed -n '1p')"
     PIN="$(printf '%s\n' "$loaded" | sed -n '2p')"
+    PAIRING_UNTIL="$(printf '%s\n' "$loaded" | sed -n '3p')"
     if [[ -z "$NAME" ]]; then
         NAME="pipedal"
     fi
@@ -65,11 +93,97 @@ PY
         log "failed to load a valid Bluetooth PIN"
         exit 1
     fi
+    if [[ ! "$PAIRING_UNTIL" =~ ^[0-9]+$ ]]; then
+        PAIRING_UNTIL=0
+    fi
+}
+
+set_classic_nap_adapter() {
+    # NAP is a classic (BR/EDR) service. If LE stays on, iPadOS pairs BLE
+    # with Just Works: Connected, no PIN, no Ethernet/PAN.
+    if command -v btmgmt >/dev/null 2>&1; then
+        btmgmt power off >/dev/null 2>&1 || true
+        btmgmt le off >/dev/null 2>&1 || true
+        btmgmt advertising off >/dev/null 2>&1 || true
+        btmgmt bredr on >/dev/null 2>&1 || true
+        btmgmt ssp off >/dev/null 2>&1 || true
+        btmgmt sc off >/dev/null 2>&1 || true
+        btmgmt io-cap 4 >/dev/null 2>&1 || true
+        btmgmt name "$NAME" >/dev/null 2>&1 || true
+        btmgmt connectable on >/dev/null 2>&1 || true
+        btmgmt pairable off >/dev/null 2>&1 || true
+        btmgmt discov off >/dev/null 2>&1 || true
+        btmgmt power on >/dev/null 2>&1 || true
+        btmgmt ssp off >/dev/null 2>&1 || true
+        btmgmt le off >/dev/null 2>&1 || true
+        btmgmt connectable on >/dev/null 2>&1 || true
+    fi
+    if command -v hciconfig >/dev/null 2>&1; then
+        # Networking + Computer so iPadOS can offer Ethernet/PAN.
+        hciconfig hci0 class 0x020100 >/dev/null 2>&1 || true
+        hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
+        hciconfig hci0 noleadv >/dev/null 2>&1 || true
+        # Page scan only: paired devices can reconnect; inquiry off so randos
+        # do not see us.
+        hciconfig hci0 pscan >/dev/null 2>&1 || true
+    fi
+    bluetoothctl power on >/dev/null 2>&1 || true
+    bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
+    bluetoothctl pairable off >/dev/null 2>&1 || true
+    bluetoothctl discoverable off >/dev/null 2>&1 || true
+}
+
+set_pairing_visible() {
+    local on="$1"
+    if [[ "$on" == 1 ]]; then
+        if command -v btmgmt >/dev/null 2>&1; then
+            btmgmt pairable on >/dev/null 2>&1 || true
+            btmgmt discov on >/dev/null 2>&1 || true
+            btmgmt connectable on >/dev/null 2>&1 || true
+            btmgmt ssp off >/dev/null 2>&1 || true
+            btmgmt le off >/dev/null 2>&1 || true
+        fi
+        if command -v hciconfig >/dev/null 2>&1; then
+            hciconfig hci0 class 0x020100 >/dev/null 2>&1 || true
+            hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
+            hciconfig hci0 piscan >/dev/null 2>&1 || true
+        fi
+        bluetoothctl pairable on >/dev/null 2>&1 || true
+        bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
+        bluetoothctl discoverable on >/dev/null 2>&1 || true
+        touch "$PAIRING_FLAG"
+        if [[ "$PAIRING_ACTIVE" != 1 ]]; then
+            log "pairing window open. iPad must enter PIN ${PIN}"
+        fi
+        PAIRING_ACTIVE=1
+    else
+        rm -f "$PAIRING_FLAG"
+        bluetoothctl pairable off >/dev/null 2>&1 || true
+        bluetoothctl discoverable off >/dev/null 2>&1 || true
+        if command -v btmgmt >/dev/null 2>&1; then
+            btmgmt pairable off >/dev/null 2>&1 || true
+            btmgmt discov off >/dev/null 2>&1 || true
+            btmgmt connectable on >/dev/null 2>&1 || true
+            btmgmt le off >/dev/null 2>&1 || true
+            btmgmt ssp off >/dev/null 2>&1 || true
+        fi
+        if command -v hciconfig >/dev/null 2>&1; then
+            hciconfig hci0 pscan >/dev/null 2>&1 || true
+            hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
+        fi
+        if [[ "$PAIRING_ACTIVE" == 1 ]]; then
+            log "pairing window closed. adapter hidden; paired devices can still reconnect"
+        fi
+        PAIRING_ACTIVE=0
+    fi
 }
 
 cleanup() {
     if [[ -n "${DNSMASQ_PID}" ]]; then
         kill "${DNSMASQ_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${NETWORK_PID}" ]]; then
+        kill "${NETWORK_PID}" >/dev/null 2>&1 || true
     fi
     if [[ -n "${AGENT_PID}" ]]; then
         kill "${AGENT_PID}" >/dev/null 2>&1 || true
@@ -86,11 +200,14 @@ cleanup() {
     if [[ -n "${BTCTL_PID}" ]]; then
         kill "${BTCTL_PID}" >/dev/null 2>&1 || true
     fi
+    rm -f "$PAIRING_FLAG"
     for adapter in /org/bluez/hci0 /org/bluez/hci1; do
         dbus-send --system --dest=org.bluez --type=method_call \
             "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
             >/dev/null 2>&1 || true
     done
+    ip link set "$DUMMY" nomaster >/dev/null 2>&1 || true
+    ip link delete "$DUMMY" >/dev/null 2>&1 || true
     ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
     ip link set "$BRIDGE" down >/dev/null 2>&1 || true
     ip link delete "$BRIDGE" type bridge >/dev/null 2>&1 || true
@@ -111,8 +228,12 @@ if ! command -v dnsmasq >/dev/null 2>&1; then
     exit 1
 fi
 
+modprobe bnep >/dev/null 2>&1 || true
+modprobe bridge >/dev/null 2>&1 || true
+modprobe dummy >/dev/null 2>&1 || true
+
 load_config
-log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (PIN required; stored in ${CONFIG_JSON})"
+log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (hidden until pairing window; PIN ${PIN})"
 
 systemctl start bluetooth >/dev/null 2>&1 || true
 
@@ -127,46 +248,42 @@ if ! bluetoothctl show >/dev/null 2>&1; then
     exit 1
 fi
 
-bluetoothctl power on >/dev/null 2>&1 || true
-bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
-bluetoothctl pairable on >/dev/null 2>&1 || true
-bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
-bluetoothctl discoverable on >/dev/null 2>&1 || true
-
-if command -v btmgmt >/dev/null 2>&1; then
-    # Computer + Networking, so iPadOS is more likely to offer an Ethernet/PAN toggle.
-    btmgmt connectable on >/dev/null 2>&1 || true
-    btmgmt discov on >/dev/null 2>&1 || true
-    btmgmt pairable on >/dev/null 2>&1 || true
-    btmgmt bredr on >/dev/null 2>&1 || true
-    btmgmt name "$NAME" >/dev/null 2>&1 || true
-    # Legacy PIN pairing so the connecting device must type the PIN.
-    # SSP numeric-comparison would only show a random number, not our PIN.
-    btmgmt ssp off >/dev/null 2>&1 || true
-    btmgmt io-cap 4 >/dev/null 2>&1 || true
-fi
-if command -v hciconfig >/dev/null 2>&1; then
-    hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
-fi
+killall bt-agent >/dev/null 2>&1 || true
+set_classic_nap_adapter
 
 ip link add name "$BRIDGE" type bridge 2>/dev/null || true
+ip link add name "$DUMMY" type dummy 2>/dev/null || true
+ip link set "$DUMMY" up >/dev/null 2>&1 || true
+ip link set "$DUMMY" master "$BRIDGE" >/dev/null 2>&1 || true
 ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
 ip addr add "${ADDR}/${PREFIX}" dev "$BRIDGE"
 ip link set "$BRIDGE" up
 ip link set "$BRIDGE" multicast on
 
 registered=""
-for adapter in /org/bluez/hci0 /org/bluez/hci1; do
-    dbus-send --system --dest=org.bluez --type=method_call \
-        "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
-        >/dev/null 2>&1 || true
-    if dbus-send --system --dest=org.bluez --print-reply --type=method_call \
-        "$adapter" org.bluez.NetworkServer1.Register string:nap string:"$BRIDGE" \
-        >/dev/null 2>&1; then
-        registered="$adapter"
-        break
+if command -v bt-network >/dev/null 2>&1; then
+    bt-network -s nap "$BRIDGE" >/dev/null 2>&1 &
+    NETWORK_PID=$!
+    sleep 0.5
+    if kill -0 "$NETWORK_PID" >/dev/null 2>&1; then
+        registered="bt-network"
+    else
+        NETWORK_PID=""
     fi
-done
+fi
+if [[ -z "$registered" ]]; then
+    for adapter in /org/bluez/hci0 /org/bluez/hci1; do
+        dbus-send --system --dest=org.bluez --type=method_call \
+            "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
+            >/dev/null 2>&1 || true
+        if dbus-send --system --dest=org.bluez --print-reply --type=method_call \
+            "$adapter" org.bluez.NetworkServer1.Register string:nap string:"$BRIDGE" \
+            >/dev/null 2>&1; then
+            registered="$adapter"
+            break
+        fi
+    done
+fi
 if [[ -z "$registered" ]]; then
     log "failed to register BlueZ NAP on pan0"
     exit 1
@@ -177,38 +294,43 @@ mkdir -p "$RUN_DIR"
 umask 077
 printf '* %s\n' "$PIN" > "$PIN_FILE"
 chmod 600 "$PIN_FILE"
+rm -f "$PAIRING_FLAG"
 
-# Pairing agent: require the configured PIN from every new device.
-if command -v bt-agent >/dev/null 2>&1; then
-    bt-agent -c KeyboardDisplay -p "$PIN_FILE" >/dev/null 2>&1 &
-    AGENT_PID=$!
-    log "PIN agent: bt-agent KeyboardDisplay"
-else
-    coproc BTCTL { stdbuf -oL bluetoothctl --agent KeyboardDisplay; }
-    if [[ -n "${BTCTL[1]:-}" ]]; then
-        printf 'power on\nsystem-alias %s\npairable on\ndiscoverable on\ndefault-agent\n' "$NAME" >&"${BTCTL[1]}"
-    fi
-    (
-        while IFS= read -r line <&"${BTCTL[0]}"; do
-            low="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
-            if [[ "$low" == *"enter pin"* || "$low" == *"pin code"* || "$low" == *"enter passkey"* ]]; then
+# Default-agent that feeds our PIN only while the pairing window is open.
+# Rejects new pairing when hidden. Authorize NAP for already-paired devices.
+coproc BTCTL { stdbuf -oL bluetoothctl --agent KeyboardDisplay; }
+BTCTL_PID="${BTCTL_PID:-}"
+if [[ -n "${BTCTL[1]:-}" ]]; then
+    printf 'power on\nsystem-alias %s\npairable off\ndiscoverable off\ndefault-agent\n' "$NAME" >&"${BTCTL[1]}"
+fi
+(
+    while IFS= read -r line <&"${BTCTL[0]}"; do
+        low="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$low" == *"enter pin"* || "$low" == *"pin code"* || "$low" == *"enter passkey"* ]]; then
+            if [[ -f "$PAIRING_FLAG" ]]; then
                 printf '%s\n' "$PIN" >&"${BTCTL[1]}"
-            elif [[ "$low" == *"confirm passkey"* || "$low" == *"request confirmation"* ]]; then
-                if [[ "$line" == *"$PIN"* ]]; then
-                    printf 'yes\n' >&"${BTCTL[1]}"
-                else
-                    printf 'no\n' >&"${BTCTL[1]}"
-                fi
-            elif [[ "$low" == *"authorize"* ]]; then
+            else
+                printf 'no\n' >&"${BTCTL[1]}"
+            fi
+        elif [[ "$low" == *"confirm passkey"* || "$low" == *"request confirmation"* ]]; then
+            if [[ -f "$PAIRING_FLAG" && "$line" == *"$PIN"* ]]; then
+                printf 'yes\n' >&"${BTCTL[1]}"
+            else
+                printf 'no\n' >&"${BTCTL[1]}"
+            fi
+        elif [[ "$low" == *"authorize"* ]]; then
+            if [[ -f "$PAIRING_FLAG" ]]; then
+                printf 'yes\n' >&"${BTCTL[1]}"
+            else
+                # Already-paired iPad reconnecting the NAP profile.
                 printf 'yes\n' >&"${BTCTL[1]}"
             fi
-        done
-    ) &
-    AGENT_READER_PID=$!
-    log "PIN agent: bluetoothctl KeyboardDisplay"
-fi
+        fi
+    done
+) &
+AGENT_READER_PID=$!
+log "PIN agent: bluetoothctl KeyboardDisplay (PIN only during pairing window)"
 
-# Auto-trust anything that successfully pairs so the iPad can reconnect later.
 (
     while true; do
         bluetoothctl devices Paired 2>/dev/null | awk '{print $2}' | while read -r mac; do
@@ -219,15 +341,24 @@ fi
 ) &
 TRUST_PID=$!
 
-# Stay discoverable/pairable. Something else (or the 180s BlueZ default) can
-# otherwise turn the adapter quiet after boot.
 (
+    last_pin=""
+    last_name=""
     while true; do
-        bluetoothctl power on >/dev/null 2>&1 || true
-        bluetoothctl pairable on >/dev/null 2>&1 || true
-        bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
-        bluetoothctl discoverable on >/dev/null 2>&1 || true
-        sleep 20
+        load_config
+        printf '* %s\n' "$PIN" > "$PIN_FILE"
+        if [[ "$NAME" != "$last_name" ]]; then
+            bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
+            last_name="$NAME"
+        fi
+        last_pin="$PIN"
+        now="$(date +%s)"
+        if [[ "$PAIRING_UNTIL" -gt "$now" ]]; then
+            set_pairing_visible 1
+        else
+            set_pairing_visible 0
+        fi
+        sleep 2
     done
 ) &
 KEEPALIVE_PID=$!
@@ -246,7 +377,7 @@ EOF
 dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
 DNSMASQ_PID=$!
 
-log "ready. iPad: Settings > Bluetooth > pair '${NAME}', enter PIN, then open http://${ADDR} (Wi-Fi can stay on internet)."
+log "ready. Hidden. Open Settings → Bluetooth remote → Allow new devices, then pair the iPad with PIN ${PIN}. Safari http://${ADDR}"
 
 wait "$DNSMASQ_PID"
 exit $?
