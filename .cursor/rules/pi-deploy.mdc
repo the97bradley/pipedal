@@ -1,0 +1,38 @@
+---
+description: Fast Pi deploy. Never full-build a .deb unless pipedald changed.
+alwaysApply: true
+---
+
+# Pi deploy: fast path by default
+
+The live machine is **pipedal.local** (user `the97bradley`). This fork is already the installed package. **Do not start `docker/build-deb.sh`, a Docker arm64 compile, CMake package, or a Pi-side cmake build unless a full binary package is actually required.**
+
+## Default (seconds)
+
+For Bluetooth scripts, the pairing agent, dbus policy, Vite/Settings UI, docs, or systemd unit text:
+
+```bash
+./docker/push-pi.sh
+```
+
+That copies `pipedal-bt-nap`, `pipedal-bt-agent`, `pipedal-bluetooth.conf`, and `vite/dist` to the Pi and restarts `bluetooth`, `pipedal-bt-nap`, and `pipedald`. Host override: `PIPEDAL_HOST=pipedal.local`.
+
+Give the human that command. Do not rebuild C++ “to be safe.”
+
+## Full `.deb` only when
+
+- `pipedald`, `pipedaladmind`, or `pipedalconfig` **C++** changed, or CMake install of a **new binary**, **or**
+- The Pi is still stock/upstream (`2.0.111` or `rerdavies/pipedal`), first install of this fork, **or**
+- The package version must bump so `apt` replaces the installed package.
+
+Then: `./docker/build-deb.sh` and `scp dist-deb/*.deb pipedal.local:~/` + `ssh -t pipedal.local 'sudo apt-get install -y ./pipedal_*.deb'`.
+
+If a change set mixes UI/scripts **and** daemon C++, do one `.deb`. If it is only UI/scripts, **only** `push-pi.sh`.
+
+## Never
+
+- Full Docker/CMake/`.deb` for a nap script, agent, Vite, or Settings copy change
+- Native `cmake` on macOS for a Pi package
+- Overlay UI onto stock `pipedald` 2.0.111
+- Treat `:5173` as the live UI; port **80** is live
+- Tell the user to wait on a multi-hour image build when `push-pi.sh` would work

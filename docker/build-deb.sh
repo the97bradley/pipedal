@@ -18,7 +18,7 @@ fi
 mkdir -p dist-deb .docker-cache
 
 echo "Building linux/arm64 .deb (Apple Silicon is native; Intel Mac qemu is slow)."
-echo "Bluetooth/UI-only? Use docker/push-pi.sh instead."
+echo "STOP: Bluetooth/UI/script-only changes must use ./docker/push-pi.sh — not this."
 export DOCKER_BUILDKIT=1
 docker buildx build \
     --platform linux/arm64 \

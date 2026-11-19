@@ -18,7 +18,7 @@ This repository is **the97bradley/pipedal**. The live Raspberry Pi (`hostname pi
 
 After any daemon, Bluetooth, or Settings UI change, **replace stock with this checkout**.
 
-Once this fork is installed, iterate with `docker/push-pi.sh` (scripts + Vite UI, seconds). Do not rebuild the arm64 `.deb` unless `pipedald` / `pipedalconfig` changed. Never overlay onto stock 2.0.111.
+Once this fork is installed, **always** iterate with `./docker/push-pi.sh` unless daemon C++ changed. Full rule: `.cursor/rules/pi-deploy.mdc`. Never overlay onto stock 2.0.111.
 
 If sudo is required on the Pi, give the exact commands. Do not stop at “stock is still installed.”
 
