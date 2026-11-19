@@ -91,6 +91,23 @@ hciconfig_try() {
     timeout 2 hciconfig "$@" >/dev/null 2>&1 || true
 }
 
+# Never call bluetoothctl. It registers its own agent, then exits and
+# unregisters it, so the iPad PIN dialog has nobody on this side.
+adapter_set() {
+    local prop="$1"
+    local value="$2"
+    timeout 3 dbus-send --system --dest=org.bluez --type=method_call \
+        /org/bluez/hci0 org.freedesktop.DBus.Properties.Set \
+        string:org.bluez.Adapter1 string:"$prop" "$value" \
+        >/dev/null 2>&1 || true
+}
+
+adapter_ready() {
+    timeout 3 dbus-send --system --print-reply --dest=org.bluez \
+        /org/bluez/hci0 org.freedesktop.DBus.Properties.Get \
+        string:org.bluez.Adapter1 string:Address >/dev/null 2>&1
+}
+
 set_classic_nap_adapter() {
     # Do not call btmgmt on Pi UART/bcm4345 — power/le/ssp commands hang forever.
     hciconfig_try hci0 up
@@ -98,9 +115,8 @@ set_classic_nap_adapter() {
     hciconfig_try hci0 sspmode 0
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
-    timeout 3 bluetoothctl power on >/dev/null 2>&1 || true
-    timeout 3 bluetoothctl system-alias "$NAME" >/dev/null 2>&1 \
-        || timeout 3 bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
+    adapter_set Powered "variant:boolean:true"
+    adapter_set Alias "variant:string:${NAME}"
 }
 
 set_pairing_visible() {
@@ -109,9 +125,9 @@ set_pairing_visible() {
         hciconfig_try hci0 class 0x020100
         hciconfig_try hci0 sspmode 0
         hciconfig_try hci0 piscan
-        timeout 3 bluetoothctl pairable on >/dev/null 2>&1 || true
-        timeout 3 bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
-        timeout 3 bluetoothctl discoverable on >/dev/null 2>&1 || true
+        adapter_set Pairable "variant:boolean:true"
+        adapter_set DiscoverableTimeout "variant:uint32:0"
+        adapter_set Discoverable "variant:boolean:true"
         touch "$PAIRING_FLAG"
         if [[ "$PAIRING_ACTIVE" != 1 ]]; then
             log "pairing window open. iPad must enter PIN ${PIN}"
@@ -119,8 +135,8 @@ set_pairing_visible() {
         PAIRING_ACTIVE=1
     else
         rm -f "$PAIRING_FLAG"
-        timeout 3 bluetoothctl pairable off >/dev/null 2>&1 || true
-        timeout 3 bluetoothctl discoverable off >/dev/null 2>&1 || true
+        adapter_set Pairable "variant:boolean:false"
+        adapter_set Discoverable "variant:boolean:false"
         hciconfig_try hci0 pscan
         hciconfig_try hci0 sspmode 0
         if [[ "$PAIRING_ACTIVE" == 1 ]]; then
@@ -171,8 +187,8 @@ if [[ ! -d /sys/class/bluetooth ]] || [[ -z "$(ls -A /sys/class/bluetooth 2>/dev
     exit 1
 fi
 
-if ! command -v bluetoothctl >/dev/null 2>&1; then
-    log "bluetoothctl not found (install bluez)"
+if ! command -v dbus-send >/dev/null 2>&1; then
+    log "dbus-send not found"
     exit 1
 fi
 if ! command -v dnsmasq >/dev/null 2>&1; then
@@ -190,12 +206,12 @@ log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (PIN ${PIN}; Jus
 systemctl start bluetooth >/dev/null 2>&1 || true
 
 for _ in $(seq 1 40); do
-    if bluetoothctl show >/dev/null 2>&1; then
+    if adapter_ready; then
         break
     fi
     sleep 0.25
 done
-if ! bluetoothctl show >/dev/null 2>&1; then
+if ! adapter_ready; then
     log "Bluetooth adapter did not become ready"
     exit 1
 fi
@@ -272,12 +288,21 @@ log "PIN agent: pipedal-bt-agent (Just Works rejected)"
 
 (
     while true; do
-        bluetoothctl devices Paired 2>/dev/null | awk '{print $2}' | while read -r mac; do
-            [[ -z "$mac" ]] && continue
-            bluetoothctl trust "$mac" >/dev/null 2>&1 || true
-            # iPadOS must start the PANU session. Do not bluetoothctl-connect
-            # every paired Mac/phone — that races the iPad and fails.
-        done
+        python3 - <<'PY' >/dev/null 2>&1 || true
+import dbus
+bus = dbus.SystemBus()
+mngr = dbus.Interface(bus.get_object("org.bluez", "/"), "org.freedesktop.DBus.ObjectManager")
+for path, ifaces in mngr.GetManagedObjects().items():
+    dev = ifaces.get("org.bluez.Device1")
+    if not dev or not dev.get("Paired"):
+        continue
+    try:
+        dbus.Interface(bus.get_object("org.bluez", path), "org.freedesktop.DBus.Properties").Set(
+            "org.bluez.Device1", "Trusted", dbus.Boolean(True)
+        )
+    except Exception:
+        pass
+PY
         sleep 8
     done
 ) &
@@ -289,7 +314,7 @@ TRUST_PID=$!
         load_config
         printf '* %s\n' "$PIN" > "$PIN_FILE"
         if [[ "$NAME" != "$last_name" ]]; then
-            bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
+            adapter_set Alias "variant:string:${NAME}"
             last_name="$NAME"
         fi
         if [[ "$PAIRING_UNTIL" == 1 ]]; then

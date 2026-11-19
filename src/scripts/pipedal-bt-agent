@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""BlueZ pairing agent: our PIN only. Rejects Just Works."""
+"""BlueZ pairing agent: our PIN only. Reclaims default agent so bluetoothctl cannot steal it."""
 import os
 import sys
 import dbus
@@ -9,7 +9,13 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-CAPABILITY = "KeyboardDisplay"
+# KeyboardOnly forces a PIN pad on the iPad. KeyboardDisplay lets iOS do
+# numeric comparison, which we then reject, so pairing never completes.
+CAPABILITY = "KeyboardOnly"
+
+
+def log(msg):
+    print(f"pipedal-bt-agent: {msg}", file=sys.stderr, flush=True)
 
 
 def read_pin():
@@ -22,6 +28,9 @@ def read_pin():
             return line
     except OSError:
         pass
+    env = os.environ.get("PIPEDAL_BT_PIN", "").strip()
+    if env.isdigit() and 4 <= len(env) <= 8:
+        return env
     return ""
 
 
@@ -34,59 +43,63 @@ class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
 
+class Canceled(dbus.DBusException):
+    _dbus_error_name = "org.bluez.Error.Canceled"
+
+
 class Agent(dbus.service.Object):
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Release(self):
-        pass
+        log("Release")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def AuthorizeService(self, device, uuid):
-        # NAP/PANU must be allowed after a successful PIN pair.
+        log(f"AuthorizeService {device} {uuid}")
         return
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
         pin = read_pin()
         if not pin:
+            log(f"RequestPinCode {device}: no PIN configured")
             raise Rejected("No PIN configured")
-        print(f"pipedal-bt-agent: PIN request from {device}", file=sys.stderr)
+        log(f"RequestPinCode {device} -> {pin}")
         return pin
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
         value = pin_int()
         if not value:
+            log(f"RequestPasskey {device}: no PIN configured")
             raise Rejected("No PIN configured")
-        print(f"pipedal-bt-agent: passkey request from {device}", file=sys.stderr)
+        log(f"RequestPasskey {device} -> {value}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
-        print(f"pipedal-bt-agent: rejected Just Works from {device}", file=sys.stderr)
+        log(f"rejected Just Works from {device}")
         raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
         expected = pin_int()
         if expected and int(passkey) == expected:
+            log(f"RequestConfirmation {device} matched PIN")
             return
-        print(
-            f"pipedal-bt-agent: rejected passkey {int(passkey)} from {device}",
-            file=sys.stderr,
-        )
+        log(f"rejected passkey {int(passkey)} from {device}")
         raise Rejected("PIN mismatch")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
-        pass
+        log(f"DisplayPinCode {device} {pincode}")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
     def DisplayPasskey(self, device, passkey, entered):
-        pass
+        log(f"DisplayPasskey {device} {int(passkey)} entered={int(entered)}")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Cancel(self):
-        pass
+        log("Cancel")
 
 
 def main():
@@ -99,13 +112,26 @@ def main():
     manager = dbus.Interface(
         bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1"
     )
+
+    def claim():
+        try:
+            manager.RegisterAgent(AGENT_PATH, CAPABILITY)
+        except dbus.exceptions.DBusException as err:
+            if "already exists" not in str(err).lower() and "in progress" not in str(err).lower():
+                pass
+        try:
+            manager.RequestDefaultAgent(AGENT_PATH)
+        except dbus.exceptions.DBusException as err:
+            log(f"RequestDefaultAgent: {err}")
+        return True
+
     try:
         manager.UnregisterAgent(AGENT_PATH)
     except dbus.exceptions.DBusException:
         pass
-    manager.RegisterAgent(AGENT_PATH, CAPABILITY)
-    manager.RequestDefaultAgent(AGENT_PATH)
-    print("pipedal-bt-agent: KeyboardDisplay default agent (PIN required)", file=sys.stderr)
+    claim()
+    log(f"{CAPABILITY} default agent (PIN required)")
+    GLib.timeout_add(200, claim)
     GLib.MainLoop().run()
 
 
