@@ -12,15 +12,13 @@ This repository is **the97bradley/pipedal**. The live Raspberry Pi (`hostname pi
 - Do **not** leave, restore, serve, overlay-on, or fall back to stock/upstream PiPedal (`rerdavies/pipedal`, Debian package `pipedal` 2.0.111, or any upstream release).
 - Do **not** make the UI work against stock `pipedald` (no fake Bluetooth settings, no try/catch that hides missing APIs so stock still “loads”).
 - Do **not** treat a Vite overlay on port 5173 as the live UI. Port **80** must be this fork.
-- Do **not** copy only the React files onto stock `/etc/pipedal/react` while stock `pipedald` is still the daemon.
+- Do **not** copy only the React files onto stock `/etc/pipedal/react` while stock `pipedald` is still the daemon. Overlay onto this fork is fine via `docker/push-pi.sh`.
 
 ## Always this fork
 
-After any daemon, Bluetooth, or Settings UI change, **replace stock with this checkout**:
+After any daemon, Bluetooth, or Settings UI change, **replace stock with this checkout**.
 
-- `pipedald`, `pipedaladmind`, `pipedalconfig`
-- `/etc/pipedal/react` (this tree’s Vite build)
-- `pipedal-bt-nap` and its systemd unit
+Once this fork is installed, iterate with `docker/push-pi.sh` (scripts + Vite UI, seconds). Do not rebuild the arm64 `.deb` unless `pipedald` / `pipedalconfig` changed. Never overlay onto stock 2.0.111.
 
 If sudo is required on the Pi, give the exact commands. Do not stop at “stock is still installed.”
 

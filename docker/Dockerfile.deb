@@ -1,16 +1,21 @@
 # Build a Raspberry Pi OS / Debian arm64 .deb.
 # On a Mac: docker/build-deb.sh
+# For Bluetooth/UI-only updates after the fork is installed: docker/push-pi.sh
 #
 # Apple Silicon is native linux/arm64. Intel Macs qemu-emulate it (slow).
 
 FROM debian:trixie AS build
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    CMAKE_BUILD_TYPE=Release
+    CMAKE_BUILD_TYPE=Release \
+    CCACHE_DIR=/root/.ccache \
+    CMAKE_C_COMPILER_LAUNCHER=ccache \
+    CMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    npm_config_cache=/root/.npm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg \
-        cmake ninja-build build-essential git pkg-config python3 gzip file \
+        cmake ninja-build build-essential git pkg-config python3 gzip file ccache \
         dpkg-dev fakeroot binutils xz-utils zstd libdpkg-perl \
         nodejs npm \
         liblilv-dev libboost-dev \
@@ -27,18 +32,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
+
+# npm deps: only invalidated when package files change
+COPY vite/package.json vite/package-lock.json /src/vite/
+WORKDIR /src/vite
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+WORKDIR /src
 COPY . .
 
-RUN git submodule update --init --recursive || true \
-    && if [ ! -f modules/SQLiteCpp/CMakeLists.txt ]; then \
+RUN if [ ! -f modules/SQLiteCpp/CMakeLists.txt ]; then \
          echo "Submodules are missing. On the host run: git submodule update --init --recursive" >&2; \
          exit 1; \
        fi
 
-WORKDIR /src/vite
-RUN npm install
-
-WORKDIR /src
 RUN cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DPIPEDAL_EXCLUDE_TESTS=ON \
@@ -46,7 +53,8 @@ RUN cmake -S . -B build -G Ninja \
         -DPIPEDAL_DEB_SIGN=OFF \
         -DPIPEDAL_DEB_SHLIBDEPS=OFF
 
-RUN cmake --build build -j"$(nproc)"
+RUN --mount=type=cache,target=/root/.ccache \
+    cmake --build build -j"$(nproc)"
 
 RUN cmake --build build --target package \
     && mkdir -p /out \

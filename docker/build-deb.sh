@@ -15,13 +15,17 @@ if ! git submodule update --init --recursive; then
     exit 1
 fi
 
-mkdir -p dist-deb
+mkdir -p dist-deb .docker-cache
 
-echo "Building linux/arm64 .deb (Apple Silicon is native; Intel Mac uses qemu and is slow)."
+echo "Building linux/arm64 .deb (Apple Silicon is native; Intel Mac qemu is slow)."
+echo "Bluetooth/UI-only? Use docker/push-pi.sh instead."
+export DOCKER_BUILDKIT=1
 docker buildx build \
     --platform linux/arm64 \
     -f docker/Dockerfile.deb \
     --target export \
+    --cache-from type=local,src="$ROOT/.docker-cache" \
+    --cache-to type=local,dest="$ROOT/.docker-cache",mode=max \
     --output type=local,dest="$ROOT/dist-deb" \
     .
 
@@ -29,6 +33,6 @@ echo
 echo "Debs:"
 ls -lh dist-deb/*.deb
 echo
-echo "Copy to the Pi and install this fork over stock:"
-echo "  scp dist-deb/*.deb the97bradley@pipedal:~/"
-echo "  ssh the97bradley@pipedal 'sudo apt-get install -y ./pipedal_*.deb'"
+echo "Install on the Pi:"
+echo "  scp dist-deb/*.deb pipedal.local:~/"
+echo "  ssh -t pipedal.local 'sudo apt-get install -y ./pipedal_*.deb'"

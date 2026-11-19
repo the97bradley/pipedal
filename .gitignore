@@ -1,5 +1,7 @@
 #build files
 build/
+dist-deb/
+.docker-cache/
 core
 #VS Code config files.
 # .vscode/  Sort this out later. .gitignore-ing an already tracked file doesn't actually work.
