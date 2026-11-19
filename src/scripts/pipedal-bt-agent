@@ -1,5 +1,13 @@
 #!/usr/bin/python3
-"""BlueZ pairing agent: our PIN only. Reclaims default agent so bluetoothctl cannot steal it."""
+"""BlueZ pairing agent for iPadOS.
+
+iPadOS classic pairing is SSP numeric comparison: it shows a random 6-digit
+code and asks the user to tap Pair. That is RequestConfirmation, NOT our
+Settings PIN. Rejecting those codes is why pairing failed.
+
+RequestPinCode / RequestPasskey still return the configured PIN if iOS uses
+passkey entry. RequestAuthorization (no-UI Just Works) is rejected.
+"""
 import os
 import sys
 import dbus
@@ -9,9 +17,7 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-# KeyboardDisplay is what iPadOS expects for a 4–8 digit PIN. KeyboardOnly
-# plus SSP-off made the iPad show a PIN then "Pairing Unsuccessful".
-CAPABILITY = "KeyboardDisplay"
+CAPABILITY = "DisplayYesNo"
 
 
 def log(msg):
@@ -39,20 +45,8 @@ def pin_int():
     return int(pin) if pin else 0
 
 
-def pin_string():
-    pin = read_pin()
-    if not pin:
-        return ""
-    # iOS passkey pads are 6 digits. Keep the configured PIN, zero-pad left.
-    return pin.zfill(6) if len(pin) < 6 else pin
-
-
 class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
-
-
-class Canceled(dbus.DBusException):
-    _dbus_error_name = "org.bluez.Error.Canceled"
 
 
 class Agent(dbus.service.Object):
@@ -67,20 +61,16 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        # Legacy PIN: send the digits the user typed, not zero-padded.
         pin = read_pin()
         if not pin:
-            log(f"RequestPinCode {device}: no PIN configured")
             raise Rejected("No PIN configured")
         log(f"RequestPinCode {device} -> {pin}")
         return pin
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        pin = pin_string()
-        value = int(pin) if pin else 0
+        value = pin_int()
         if not value:
-            log(f"RequestPasskey {device}: no PIN configured")
             raise Rejected("No PIN configured")
         log(f"RequestPasskey {device} -> {value:06d}")
         return dbus.UInt32(value)
@@ -88,17 +78,13 @@ class Agent(dbus.service.Object):
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
         log(f"rejected Just Works from {device}")
-        raise Rejected("PIN required")
+        raise Rejected("Confirmation required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        expected = pin_int()
-        padded = int(pin_string()) if pin_string() else 0
-        if expected and int(passkey) in (expected, padded):
-            log(f"RequestConfirmation {device} matched PIN")
-            return
-        log(f"rejected passkey {int(passkey):06d} from {device} (expected {padded:06d})")
-        raise Rejected("PIN mismatch")
+        # iPadOS numeric comparison. The 6-digit code is random, not our PIN.
+        log(f"RequestConfirmation {device} {int(passkey):06d} accepted")
+        return
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
@@ -120,20 +106,22 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
     Agent(bus, AGENT_PATH)
-    manager = dbus.Interface(
-        bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1"
-    )
+
+    def manager():
+        return dbus.Interface(
+            bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1"
+        )
 
     def claim():
         try:
-            manager.RegisterAgent(AGENT_PATH, CAPABILITY)
-        except dbus.exceptions.DBusException as err:
-            if "already exists" not in str(err).lower() and "in progress" not in str(err).lower():
+            mgr = manager()
+            try:
+                mgr.RegisterAgent(AGENT_PATH, CAPABILITY)
+            except dbus.exceptions.DBusException:
                 pass
-        try:
-            manager.RequestDefaultAgent(AGENT_PATH)
-        except dbus.exceptions.DBusException as err:
-            log(f"RequestDefaultAgent: {err}")
+            mgr.RequestDefaultAgent(AGENT_PATH)
+        except dbus.exceptions.DBusException:
+            pass
         try:
             props = dbus.Interface(
                 bus.get_object("org.bluez", "/org/bluez/hci0"),
@@ -148,11 +136,11 @@ def main():
         return True
 
     try:
-        manager.UnregisterAgent(AGENT_PATH)
+        manager().UnregisterAgent(AGENT_PATH)
     except dbus.exceptions.DBusException:
         pass
     claim()
-    log(f"{CAPABILITY} default agent (PIN required)")
+    log(f"{CAPABILITY} default agent (iPad numeric comparison accepted)")
     GLib.timeout_add(200, claim)
     GLib.MainLoop().run()
 
