@@ -150,7 +150,7 @@ const BluetoothConfigDialog =
                             fullWidth
                             value={this.state.pin}
                             error={this.state.pinError}
-                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Typed on the iPad, checked on the Pi. 4–8 digits. iPad pads are 6 digits: 001037."}
+                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Typed on the iPad keypad (001037). If iPad shows Pair/Cancel instead, tap Pair."}
                             inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 8 }}
                             onChange={(e) => this.setState({ pin: e.target.value, pinError: false, pinErrorMessage: "" })}
                             disabled={!this.state.enabled}

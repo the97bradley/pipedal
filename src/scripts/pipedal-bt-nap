@@ -118,10 +118,12 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    btmgmt_try ssp off
+    # iOS rejects legacy PIN (sspmode 0) with Authentication Failure ~100ms
+    # after PIN Code Reply — after the keypad, which is the iPad error.
+    btmgmt_try ssp on
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 0
+    hciconfig_try hci0 sspmode 1
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
@@ -336,8 +338,11 @@ TRUST_PID=$!
         ticks=$((ticks + 1))
         if (( ticks % 15 == 0 )); then
             settings="$(timeout 2 btmgmt info 2>/dev/null || true)"
-            if printf '%s\n' "$settings" | grep "current settings" | grep -Eq " ssp| low energy"; then
+            if printf '%s\n' "$settings" | grep "current settings" | grep -q "low energy"; then
                 log "radio drifted; reapplying classic NAP adapter"
+                set_classic_nap_adapter
+            elif ! printf '%s\n' "$settings" | grep "current settings" | grep -q " ssp"; then
+                log "SSP dropped; turning it back on for iOS"
                 set_classic_nap_adapter
             fi
         fi
