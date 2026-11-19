@@ -1,0 +1,154 @@
+#!/usr/bin/python3
+"""Compare the typed PIN, then open PiPedal on the PAN.
+
+iOS legacy PIN pairing never delivers the keypad digits to userspace;
+the controller returns Authentication Failure even when both sides use
+001037. After the Bluetooth link is up, HTTP on pan0 collects the PIN,
+compares it, and only then exposes the PiPedal UI.
+"""
+import os
+import subprocess
+import sys
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+PIN_FILE = "/run/pipedal/bt-pin"
+UNLOCKED = "/run/pipedal/bt-unlocked"
+LISTEN = ("172.21.0.1", 8099)
+NFT_TABLE = "pipedal_bt"
+
+
+def nft_lock():
+    subprocess.call(["nft", "delete", "table", "ip", NFT_TABLE], stderr=subprocess.DEVNULL)
+    script = f"""
+table ip {NFT_TABLE} {{
+    chain prerouting {{
+        type nat hook prerouting priority dstnat;
+        iifname "pan0" tcp dport 80 redirect to :8099
+    }}
+}}
+"""
+    proc = subprocess.run(["nft", "-f", "-"], input=script, text=True, capture_output=True)
+    if proc.returncode != 0:
+        log(f"nft lock failed: {proc.stderr.strip()}")
+        return False
+    return True
+
+
+def nft_unlock():
+    subprocess.call(["nft", "delete", "table", "ip", NFT_TABLE], stderr=subprocess.DEVNULL)
+
+
+def log(msg):
+    print(f"pipedal-bt-auth: {msg}", file=sys.stderr, flush=True)
+
+
+def read_pin():
+    try:
+        with open(PIN_FILE, encoding="utf-8") as f:
+            line = f.readline().strip()
+        if line.startswith("* "):
+            line = line[2:].strip()
+        if line.isdigit() and 4 <= len(line) <= 8:
+            return line
+    except OSError:
+        pass
+    return ""
+
+
+def pins_match(got, expected):
+    if not got or not expected:
+        return False
+    if not got.isdigit():
+        return False
+    return got == expected or int(got) == int(expected)
+
+
+def lock_ui():
+    try:
+        os.remove(UNLOCKED)
+    except OSError:
+        pass
+    nft_lock()
+    log("PiPedal UI locked until PIN matches")
+
+
+def unlock_ui():
+    with open(UNLOCKED, "w", encoding="utf-8") as f:
+        f.write("ok\n")
+    nft_unlock()
+    log("PIN matched; PiPedal UI unlocked")
+
+
+PAGE = """<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PiPedal PIN</title>
+</head>
+<body style="font-family:sans-serif;max-width:22em;margin:3em auto;padding:0 1em">
+<h1 style="font-size:1.4em">PiPedal</h1>
+<p>Type the pairing PIN. If it matches, this page opens the pedal.</p>
+<form method="post">
+<input name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" autofocus
+ style="font-size:1.4em;width:8em;letter-spacing:0.15em">
+<button type="submit" style="font-size:1.1em;margin-left:0.5em">Connect</button>
+</form>
+<p style="color:#b00020">{err}</p>
+</body>
+</html>
+"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        log(fmt % args)
+
+    def _html(self, status, body):
+        data = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        if os.path.exists(UNLOCKED):
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+        self._html(200, PAGE.format(err=""))
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        got = (urllib.parse.parse_qs(raw).get("pin") or [""])[0].strip()
+        expected = read_pin()
+        if pins_match(got, expected):
+            unlock_ui()
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+        log(f"PIN mismatch from {self.client_address[0]}")
+        self._html(403, PAGE.format(err="Wrong PIN"))
+
+
+def main():
+    if len(sys.argv) >= 2:
+        global PIN_FILE
+        PIN_FILE = sys.argv[1]
+    lock_ui()
+    httpd = HTTPServer(LISTEN, Handler)
+    log(f"comparing PIN on {LISTEN[0]}:{LISTEN[1]}")
+    try:
+        httpd.serve_forever()
+    finally:
+        nft_unlock()
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    main()

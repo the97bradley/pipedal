@@ -29,6 +29,7 @@ TRUST_PID=""
 KEEPALIVE_PID=""
 NETWORK_PID=""
 DNSMASQ_PID=""
+AUTH_PID=""
 BTCTL_PID=""
 NAME=""
 PIN=""
@@ -118,11 +119,11 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    # SSP off => iPad keypad (type-in PIN). SSP on => Pi sends a random code.
-    btmgmt_try ssp off
+    # SSP on so iOS can form a link. Settings PIN is compared by pipedal-bt-auth.
+    btmgmt_try ssp on
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 0
+    hciconfig_try hci0 sspmode 1
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
@@ -175,7 +176,11 @@ cleanup() {
     if [[ -n "${BTCTL_PID}" ]]; then
         kill "${BTCTL_PID}" >/dev/null 2>&1 || true
     fi
-    rm -f "$PAIRING_FLAG"
+    if [[ -n "${AUTH_PID}" ]]; then
+        kill "${AUTH_PID}" >/dev/null 2>&1 || true
+    fi
+    nft delete table ip pipedal_bt >/dev/null 2>&1 || true
+    rm -f "$PAIRING_FLAG" /run/pipedal/bt-unlocked
     for adapter in /org/bluez/hci0 /org/bluez/hci1; do
         dbus-send --system --dest=org.bluez --type=method_call \
             "$adapter" org.bluez.NetworkServer1.Unregister string:nap \
@@ -356,7 +361,11 @@ EOF
 dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
 DNSMASQ_PID=$!
 
-log "ready. Pair '${NAME}' with PIN ${PIN}, wait for Ethernet/PAN, then http://${ADDR}"
+python3 /usr/sbin/pipedal-bt-auth "$PIN_FILE" &
+AUTH_PID=$!
+log "PIN compare: type ${PIN} at http://${ADDR} after Bluetooth connects"
+
+log "ready. Pair '${NAME}', open http://${ADDR}, type PIN ${PIN}"
 
 wait "$DNSMASQ_PID"
 exit $?

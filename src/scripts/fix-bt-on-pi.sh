@@ -7,14 +7,14 @@ USER_HOME="${USER_HOME:-/home/the97bradley}"
 
 install -m 755 "$USER_HOME/pipedal-bt-nap" /usr/sbin/pipedal-bt-nap
 install -m 755 "$USER_HOME/pipedal-bt-agent" /usr/sbin/pipedal-bt-agent
+install -m 755 "$USER_HOME/pipedal-bt-auth" /usr/sbin/pipedal-bt-auth
 
 # bluetoothctl loops steal the PIN agent.
 systemctl --user --machine="${SUDO_USER:-the97bradley}@.host" disable --now pipedal-bt-advertise.service 2>/dev/null || true
 pkill -u "${SUDO_USER:-the97bradley}" -f "bluetoothctl" 2>/dev/null || true
 
 hciconfig hci0 up || true
-# Type-in PIN on the iPad. SSP numeric comparison lets anyone tap Pair.
-hciconfig hci0 sspmode 0
+hciconfig hci0 sspmode 1
 hciconfig hci0 class 0x020100
 hciconfig hci0 piscan || true
 
@@ -25,4 +25,4 @@ sleep 2
 echo "SSP: $(hciconfig hci0 sspmode | tr '\n' ' ')"
 echo "NAP: $(systemctl is-active pipedal-bt-nap)"
 journalctl -u pipedal-bt-nap -n 8 --no-pager
-echo "Pair pipedal with PIN 1037, then http://172.21.0.1"
+echo "Pair pipedal, then type PIN 001037 at http://172.21.0.1"
