@@ -9,9 +9,9 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-# KeyboardOnly forces a PIN pad on the iPad. KeyboardDisplay lets iOS do
-# numeric comparison, which we then reject, so pairing never completes.
-CAPABILITY = "KeyboardOnly"
+# KeyboardDisplay is what iPadOS expects for a 4–8 digit PIN. KeyboardOnly
+# plus SSP-off made the iPad show a PIN then "Pairing Unsuccessful".
+CAPABILITY = "KeyboardDisplay"
 
 
 def log(msg):
@@ -39,6 +39,14 @@ def pin_int():
     return int(pin) if pin else 0
 
 
+def pin_string():
+    pin = read_pin()
+    if not pin:
+        return ""
+    # iOS passkey pads are 6 digits. Keep the configured PIN, zero-pad left.
+    return pin.zfill(6) if len(pin) < 6 else pin
+
+
 class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
@@ -59,7 +67,7 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        pin = read_pin()
+        pin = pin_string() or read_pin()
         if not pin:
             log(f"RequestPinCode {device}: no PIN configured")
             raise Rejected("No PIN configured")
@@ -68,11 +76,12 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        value = pin_int()
+        pin = pin_string()
+        value = int(pin) if pin else 0
         if not value:
             log(f"RequestPasskey {device}: no PIN configured")
             raise Rejected("No PIN configured")
-        log(f"RequestPasskey {device} -> {value}")
+        log(f"RequestPasskey {device} -> {value:06d}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
@@ -83,10 +92,11 @@ class Agent(dbus.service.Object):
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
         expected = pin_int()
-        if expected and int(passkey) == expected:
+        padded = int(pin_string()) if pin_string() else 0
+        if expected and int(passkey) in (expected, padded):
             log(f"RequestConfirmation {device} matched PIN")
             return
-        log(f"rejected passkey {int(passkey)} from {device}")
+        log(f"rejected passkey {int(passkey):06d} from {device} (expected {padded:06d})")
         raise Rejected("PIN mismatch")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
