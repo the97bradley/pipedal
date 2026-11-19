@@ -36,3 +36,4 @@ If a change set mixes UI/scripts **and** daemon C++, do one `.deb`. If it is onl
 - Overlay UI onto stock `pipedald` 2.0.111
 - Treat `:5173` as the live UI; port **80** is live
 - Tell the user to wait on a multi-hour image build when `push-pi.sh` would work
+- Leave a `bluetoothctl` while-loop in crontab or `~/.config/systemd/user`. `bluetoothctl` steals the PIN agent and iPad pairing fails. Keep the adapter discoverable over D-Bus only.
