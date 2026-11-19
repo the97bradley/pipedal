@@ -1,12 +1,11 @@
 #!/usr/bin/python3
-"""BlueZ pairing agent for iPadOS.
+"""BlueZ agent: pre-shared PIN entered on the iPad, checked on the Pi.
 
-iPadOS classic pairing is SSP numeric comparison: it shows a random 6-digit
-code and asks the user to tap Pair. That is RequestConfirmation, NOT our
-Settings PIN. Rejecting those codes is why pairing failed.
+iPadOS numeric comparison (RequestConfirmation with a random 6-digit code)
+is rejected — that is the tap-Pair path anyone nearby can complete.
 
-RequestPinCode / RequestPasskey still return the configured PIN if iOS uses
-passkey entry. RequestAuthorization (no-UI Just Works) is rejected.
+Legacy RequestPinCode and SSP RequestPasskey return the configured PIN so
+the iPad keypad can type it. DisplayOnly makes the iPad the keyboard side.
 """
 import os
 import sys
@@ -17,7 +16,8 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-CAPABILITY = "DisplayYesNo"
+# DisplayOnly + iPad DisplayYesNo => passkey entry on the iPad, not numeric compare.
+CAPABILITY = "DisplayOnly"
 
 
 def log(msg):
@@ -72,19 +72,23 @@ class Agent(dbus.service.Object):
         value = pin_int()
         if not value:
             raise Rejected("No PIN configured")
-        log(f"RequestPasskey {device} -> {value:06d}")
+        log(f"RequestPasskey {device} -> {value}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
         log(f"rejected Just Works from {device}")
-        raise Rejected("Confirmation required")
+        raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        # iPadOS numeric comparison. The 6-digit code is random, not our PIN.
-        log(f"RequestConfirmation {device} {int(passkey):06d} accepted")
-        return
+        expected = pin_int()
+        got = int(passkey)
+        if expected and got == expected:
+            log(f"RequestConfirmation {device} matched PIN {expected}")
+            return
+        log(f"rejected numeric-comparison {got:06d} from {device} (PIN {expected} required)")
+        raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
@@ -92,7 +96,7 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
     def DisplayPasskey(self, device, passkey, entered):
-        log(f"DisplayPasskey {device} {int(passkey)} entered={int(entered)}")
+        log(f"DisplayPasskey {device} {int(passkey):06d} entered={int(entered)}")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Cancel(self):
@@ -140,7 +144,7 @@ def main():
     except dbus.exceptions.DBusException:
         pass
     claim()
-    log(f"{CAPABILITY} default agent (iPad numeric comparison accepted)")
+    log(f"{CAPABILITY} default agent (iPad must type PIN {read_pin() or '?'})")
     GLib.timeout_add(200, claim)
     GLib.MainLoop().run()
 

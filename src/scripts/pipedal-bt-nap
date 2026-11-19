@@ -112,7 +112,9 @@ set_classic_nap_adapter() {
     # Do not call btmgmt on Pi UART/bcm4345 — power/le/ssp commands hang forever.
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 1
+    # SSP off: legacy PIN entry on the iPad. SSP on = random numeric
+    # comparison which anyone can confirm with Pair.
+    hciconfig_try hci0 sspmode 0
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
@@ -123,7 +125,9 @@ set_pairing_visible() {
     local on="$1"
     if [[ "$on" == 1 ]]; then
         hciconfig_try hci0 class 0x020100
-        hciconfig_try hci0 sspmode 1
+        # SSP off: legacy PIN entry on the iPad. SSP on = random numeric
+    # comparison which anyone can confirm with Pair.
+    hciconfig_try hci0 sspmode 0
         hciconfig_try hci0 piscan
         adapter_set Pairable "variant:boolean:true"
         adapter_set DiscoverableTimeout "variant:uint32:0"
@@ -138,7 +142,9 @@ set_pairing_visible() {
         adapter_set Pairable "variant:boolean:false"
         adapter_set Discoverable "variant:boolean:false"
         hciconfig_try hci0 pscan
-        hciconfig_try hci0 sspmode 1
+        # SSP off: legacy PIN entry on the iPad. SSP on = random numeric
+    # comparison which anyone can confirm with Pair.
+    hciconfig_try hci0 sspmode 0
         if [[ "$PAIRING_ACTIVE" == 1 ]]; then
             log "pairing window closed. adapter hidden; paired devices can still reconnect"
         fi

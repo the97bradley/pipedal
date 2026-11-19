@@ -150,7 +150,7 @@ const BluetoothConfigDialog =
                             fullWidth
                             value={this.state.pin}
                             error={this.state.pinError}
-                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Required on every new device. 4–8 digits. Already-paired devices reconnect without it."}
+                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Typed on the iPad, checked on the Pi. 4–8 digits. 6-digit pads: add leading zeros (1037 → 001037)."}
                             inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 8 }}
                             onChange={(e) => this.setState({ pin: e.target.value, pinError: false, pinErrorMessage: "" })}
                             disabled={!this.state.enabled}
@@ -166,8 +166,8 @@ const BluetoothConfigDialog =
                             label="Discoverable"
                         />
                         <Typography variant="body2" color="textSecondary" style={{ lineHeight: "1.45em" }}>
-                            New devices must enter PIN {this.state.pin || "••••"}. Just Works pairing is rejected.
-                            Forget any old “Connected” pairing that did not ask for a PIN — that was not the network.
+                            New devices must type PIN {this.state.pin || "••••"} on the iPad. A random 6-digit
+                            code with only Pair/Cancel is rejected. Forget any pairing that did not ask you to type the PIN.
                         </Typography>
                         <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
