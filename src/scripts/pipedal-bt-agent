@@ -1,18 +1,25 @@
 #!/usr/bin/python3
-"""BlueZ agent: iPad types the Settings PIN, Pi compares it.
+"""BlueZ agent for PiPedal NAP.
 
-KeyboardOnly advertised MITM-required; iPad is MITM-not-required, then
-legacy PIN failed immediately after the keypad. KeyboardDisplay matches
-the iPad. SSP compare-codes are still rejected.
+iOS keypad PIN (RequestPinCode) is compared on the controller and, on
+bcm4345, fails with Authentication Failure in ~100ms for both 001037 and
+1037. The iPad link is allowed via SSP confirmation; pipedal-bt-auth
+compares the Settings PIN before PiPedal is reachable.
+
+Do not run hciconfig/btmgmt from this process. That drops the ACL during
+PIN Code Reply.
 """
 import os
-import subprocess
 import sys
 import time
 import dbus
 import dbus.service
 import dbus.mainloop.glib
 from gi.repository import GLib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, "/usr/lib/pipedal")
+from pipedal_bt_pin import pin_variants, read_pin  # noqa: E402
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
@@ -24,45 +31,6 @@ def log(msg):
     print(f"pipedal-bt-agent: {msg}", file=sys.stderr, flush=True)
 
 
-def force_legacy_pin():
-    try:
-        subprocess.call(["hciconfig", "hci0", "sspmode", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-
-def read_pin():
-    try:
-        with open(PIN_FILE, encoding="utf-8") as f:
-            line = f.readline().strip()
-        if line.startswith("* "):
-            line = line[2:].strip()
-        if line.isdigit() and 4 <= len(line) <= 8:
-            return line
-    except OSError:
-        pass
-    env = os.environ.get("PIPEDAL_BT_PIN", "").strip()
-    if env.isdigit() and 4 <= len(env) <= 8:
-        return env
-    return ""
-
-
-def pin_variants():
-    pin = read_pin()
-    if not pin:
-        return []
-    variants = [pin]
-    stripped = pin.lstrip("0") or "0"
-    if len(stripped) < 4:
-        stripped = stripped.zfill(4)
-    if stripped not in variants:
-        variants.append(stripped)
-    padded = pin.zfill(6)
-    if padded not in variants:
-        variants.append(padded)
-    return variants
-
-
 class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
@@ -70,7 +38,6 @@ class Rejected(dbus.DBusException):
 class Agent(dbus.service.Object):
     def __init__(self, bus, path):
         super().__init__(bus, path)
-        self._bus = bus
         self._handshake_until = 0.0
         self._try = {}
 
@@ -82,7 +49,7 @@ class Agent(dbus.service.Object):
         return time.time() < self._handshake_until
 
     def _next_pin(self, device):
-        variants = pin_variants()
+        variants = pin_variants(read_pin(PIN_FILE))
         if not variants:
             return ""
         n = self._try.get(str(device), 0)
@@ -100,21 +67,21 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        pin = self._next_pin(device)
-        if not pin:
+        p = self._next_pin(device)
+        if not p:
             raise Rejected("No PIN configured")
         self._begin_handshake()
-        log(f"RequestPinCode {device} -> {pin} (compare with iPad keypad)")
-        return pin
+        log(f"RequestPinCode {device} -> {p}")
+        return p
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        pin = self._next_pin(device)
-        if not pin:
+        p = self._next_pin(device)
+        if not p:
             raise Rejected("No PIN configured")
         self._begin_handshake()
-        log(f"RequestPasskey {device} -> {int(pin)}")
-        return dbus.UInt32(int(pin))
+        log(f"RequestPasskey {device} -> {int(p)}")
+        return dbus.UInt32(int(p))
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
@@ -123,13 +90,11 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        expected = read_pin()
-        got = int(passkey)
-        if expected and got == int(expected):
-            log(f"RequestConfirmation {device} matched {got:06d}")
-            return
-        log(f"rejected Pi-sent passkey {got:06d} from {device}")
-        raise Rejected("PIN required")
+        # iOS DisplayYesNo. Rejecting this leaves only legacy PIN, which HCI
+        # traces show failing in ~100ms after the keypad for 001037 and 1037.
+        log(f"RequestConfirmation {device} passkey={int(passkey):06d}; PIN still required at http://172.21.0.1")
+        self._begin_handshake()
+        return
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
@@ -169,7 +134,6 @@ def main():
             mgr.RequestDefaultAgent(AGENT_PATH)
         except dbus.exceptions.DBusException:
             pass
-        force_legacy_pin()
         return True
 
     def adapter_once():
@@ -185,26 +149,13 @@ def main():
         except dbus.exceptions.DBusException:
             pass
 
-    def on_props(interface, changed, _invalidated, path=""):
-        if interface != "org.bluez.Device1":
-            return
-        if "Connected" in changed and bool(changed["Connected"]):
-            force_legacy_pin()
-            log(f"device connected {path}; SSP off for keypad PIN")
-
     try:
         manager().UnregisterAgent(AGENT_PATH)
     except dbus.exceptions.DBusException:
         pass
     adapter_once()
     claim_agent()
-    bus.add_signal_receiver(
-        on_props,
-        dbus_interface="org.freedesktop.DBus.Properties",
-        signal_name="PropertiesChanged",
-        path_keyword="path",
-    )
-    log(f"{CAPABILITY} default agent (type PIN {read_pin() or '?'})")
+    log(f"{CAPABILITY} default agent (NAP PIN {read_pin(PIN_FILE) or '?'} at http://172.21.0.1)")
     GLib.timeout_add(2000, claim_agent)
     GLib.MainLoop().run()
 

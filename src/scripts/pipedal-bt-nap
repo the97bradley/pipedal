@@ -119,16 +119,27 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    # SSP off so iPad shows a keypad. SSP on makes the Pi send a random code.
-    btmgmt_try ssp off
+    # SSP on: iOS keypad PIN dies with Auth Failure in ~100ms (001037 and 1037).
+    btmgmt_try ssp on
+    btmgmt_try io-cap 4
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 0
-    btmgmt_try io-cap 4
+    hciconfig_try hci0 sspmode 1
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
     adapter_set Alias "variant:string:${NAME}"
+    local i
+    for i in 1 2 3 4 5; do
+        if hciconfig hci0 sspmode 2>/dev/null | grep -q Enabled; then
+            log "SSP enabled"
+            return 0
+        fi
+        btmgmt_try ssp on
+        hciconfig_try hci0 sspmode 1
+        sleep 0.3
+    done
+    log "WARNING: SSP still disabled; iPad keypad PIN will fail"
 }
 
 set_pairing_visible() {
@@ -141,7 +152,7 @@ set_pairing_visible() {
         adapter_set Discoverable "variant:boolean:true"
         touch "$PAIRING_FLAG"
         if [[ "$PAIRING_ACTIVE" != 1 ]]; then
-            log "pairing window open. iPad must enter PIN ${PIN}"
+            log "pairing window open. iPad taps Pair, then types PIN ${PIN} at http://${ADDR}"
         fi
         PAIRING_ACTIVE=1
     else
@@ -293,7 +304,6 @@ mkdir -p "$RUN_DIR"
 umask 077
 printf '* %s\n' "$PIN" > "$PIN_FILE"
 chmod 600 "$PIN_FILE"
-rm -f "$PAIRING_FLAG"
 
 python3 /usr/sbin/pipedal-bt-agent "$PIN_FILE" &
 AGENT_PID=$!

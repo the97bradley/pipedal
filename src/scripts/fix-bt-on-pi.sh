@@ -8,13 +8,16 @@ USER_HOME="${USER_HOME:-/home/the97bradley}"
 install -m 755 "$USER_HOME/pipedal-bt-nap" /usr/sbin/pipedal-bt-nap
 install -m 755 "$USER_HOME/pipedal-bt-agent" /usr/sbin/pipedal-bt-agent
 install -m 755 "$USER_HOME/pipedal-bt-auth" /usr/sbin/pipedal-bt-auth
+install -m 644 "$USER_HOME/pipedal_bt_pin.py" /usr/sbin/pipedal_bt_pin.py
+install -d /usr/lib/pipedal
+install -m 644 "$USER_HOME/pipedal_bt_pin.py" /usr/lib/pipedal/pipedal_bt_pin.py
 
 # bluetoothctl loops steal the PIN agent.
 systemctl --user --machine="${SUDO_USER:-the97bradley}@.host" disable --now pipedal-bt-advertise.service 2>/dev/null || true
 pkill -u "${SUDO_USER:-the97bradley}" -f "bluetoothctl" 2>/dev/null || true
 
 hciconfig hci0 up || true
-hciconfig hci0 sspmode 0
+hciconfig hci0 sspmode 1
 hciconfig hci0 class 0x020100
 hciconfig hci0 piscan || true
 

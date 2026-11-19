@@ -968,6 +968,9 @@ install (PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal-bt-nap
     ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal-bt-auth
     DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin
 )
+install (FILES ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal_bt_pin.py
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin
+)
 install (FILES ${CMAKE_CURRENT_SOURCE_DIR}/dbus/pipedal-bluetooth.conf
     DESTINATION /etc/dbus-1/system.d
 )

@@ -26,6 +26,7 @@ scp -q \
     src/scripts/pipedal-bt-nap \
     src/scripts/pipedal-bt-agent \
     src/scripts/pipedal-bt-auth \
+    src/scripts/pipedal_bt_pin.py \
     src/dbus/pipedal-bluetooth.conf \
     "${HOST}:~/"
 
@@ -37,6 +38,9 @@ ssh -t "$HOST" 'set -e
 sudo install -m 755 "$HOME/pipedal-bt-nap" /usr/sbin/pipedal-bt-nap
 sudo install -m 755 "$HOME/pipedal-bt-agent" /usr/sbin/pipedal-bt-agent
 sudo install -m 755 "$HOME/pipedal-bt-auth" /usr/sbin/pipedal-bt-auth
+sudo install -m 644 "$HOME/pipedal_bt_pin.py" /usr/sbin/pipedal_bt_pin.py
+sudo mkdir -p /usr/lib/pipedal
+sudo install -m 644 "$HOME/pipedal_bt_pin.py" /usr/lib/pipedal/pipedal_bt_pin.py
 sudo install -m 644 "$HOME/pipedal-bluetooth.conf" /etc/dbus-1/system.d/pipedal-bluetooth.conf
 sudo mkdir -p /etc/pipedal/react
 sudo cp -a "$HOME/pipedal-ui/." /etc/pipedal/react/

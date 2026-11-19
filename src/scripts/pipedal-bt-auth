@@ -12,6 +12,10 @@ import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, "/usr/lib/pipedal")
+from pipedal_bt_pin import pins_match, read_pin as read_pin_file  # noqa: E402
+
 PIN_FILE = "/run/pipedal/bt-pin"
 UNLOCKED = "/run/pipedal/bt-unlocked"
 LISTEN = ("172.21.0.1", 8099)
@@ -44,24 +48,7 @@ def log(msg):
 
 
 def read_pin():
-    try:
-        with open(PIN_FILE, encoding="utf-8") as f:
-            line = f.readline().strip()
-        if line.startswith("* "):
-            line = line[2:].strip()
-        if line.isdigit() and 4 <= len(line) <= 8:
-            return line
-    except OSError:
-        pass
-    return ""
-
-
-def pins_match(got, expected):
-    if not got or not expected:
-        return False
-    if not got.isdigit():
-        return False
-    return got == expected or int(got) == int(expected)
+    return read_pin_file(PIN_FILE)
 
 
 def lock_ui():

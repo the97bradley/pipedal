@@ -41,6 +41,12 @@ set(SUBMODULE_INSTALL OFF CACHE BOOL "" FORCE)
 include(CTest)
 enable_testing()
 
+add_test(
+    NAME pipedalBtPin
+    COMMAND python3 -m unittest discover -s ${CMAKE_SOURCE_DIR}/test -p "test_pipedal_bt*.py" -v
+)
+set_tests_properties(pipedalBtPin PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_subdirectory("modules")
 
 add_subdirectory("PiPedalCommon")
