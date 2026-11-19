@@ -1,15 +1,15 @@
 #!/usr/bin/python3
 """BlueZ agent: pre-shared PIN typed on the iPad, compared on the Pi.
 
-SSP numeric comparison (RequestConfirmation with a random 6-digit code)
-is rejected — that is the tap-Pair path anyone nearby can complete.
+SSP numeric comparison is rejected. RequestPinCode returns the Settings
+PIN immediately so the iPad is not left spinning after the keypad.
 
-PIN Code Reply is held for 30 seconds so the handshake stays up while
-the iPad keypad is used. Immediate reply was Authentication Failure in
-~100ms — Pairing Unsuccessful after the PIN was typed.
+A 30s handshake window blocks Pair()/adapter churn so the ACL is not
+torn down while the iPad is still on the PIN dialog.
 """
 import os
 import sys
+import time
 import dbus
 import dbus.service
 import dbus.mainloop.glib
@@ -18,7 +18,7 @@ from gi.repository import GLib
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
 CAPABILITY = "KeyboardOnly"
-PIN_WAIT_SEC = 30
+HANDSHAKE_SEC = 30
 
 
 def log(msg):
@@ -57,72 +57,42 @@ class Rejected(dbus.DBusException):
 class Agent(dbus.service.Object):
     def __init__(self, bus, path):
         super().__init__(bus, path)
-        self._cancel = False
         self._bus = bus
-        self._pairing = set()
-        self._pin_timer = None
-        self._handshake = False
+        self._handshake_until = 0.0
 
-    def _clear_pin_timer(self):
-        if self._pin_timer is not None:
-            GLib.source_remove(self._pin_timer)
-            self._pin_timer = None
+    def _begin_handshake(self):
+        self._handshake_until = time.time() + HANDSHAKE_SEC
+        log(f"handshake open {HANDSHAKE_SEC}s")
 
-    def _hold_pin(self, kind, device, pin, reply_handler, error_handler):
-        self._cancel = False
-        self._handshake = True
-        self._clear_pin_timer()
-        log(f"{kind} {device} handshake held {PIN_WAIT_SEC}s for iPad keypad ({pin})")
-
-        def finish():
-            self._pin_timer = None
-            self._handshake = False
-            if self._cancel:
-                log(f"{kind} {device} cancelled")
-                error_handler(Rejected("Cancelled"))
-                return False
-            log(f"{kind} {device} -> {pin}")
-            reply_handler(pin if kind == "RequestPinCode" else dbus.UInt32(int(pin)))
-            return False
-
-        self._pin_timer = GLib.timeout_add_seconds(PIN_WAIT_SEC, finish)
+    def in_handshake(self):
+        return time.time() < self._handshake_until
 
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Release(self):
         log("Release")
-        self._clear_pin_timer()
-        self._handshake = False
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def AuthorizeService(self, device, uuid):
         log(f"AuthorizeService {device} {uuid}")
         return
 
-    @dbus.service.method(
-        "org.bluez.Agent1",
-        in_signature="o",
-        out_signature="s",
-        async_callbacks=("reply_handler", "error_handler"),
-    )
-    def RequestPinCode(self, device, reply_handler, error_handler):
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
         pin = pin_for_ipad()
         if not pin:
-            error_handler(Rejected("No PIN configured"))
-            return
-        self._hold_pin("RequestPinCode", device, pin, reply_handler, error_handler)
+            raise Rejected("No PIN configured")
+        self._begin_handshake()
+        log(f"RequestPinCode {device} -> {pin} (iPad types this; handshake {HANDSHAKE_SEC}s)")
+        return pin
 
-    @dbus.service.method(
-        "org.bluez.Agent1",
-        in_signature="o",
-        out_signature="u",
-        async_callbacks=("reply_handler", "error_handler"),
-    )
-    def RequestPasskey(self, device, reply_handler, error_handler):
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
         pin = pin_for_ipad()
         if not pin:
-            error_handler(Rejected("No PIN configured"))
-            return
-        self._hold_pin("RequestPasskey", device, pin, reply_handler, error_handler)
+            raise Rejected("No PIN configured")
+        self._begin_handshake()
+        log(f"RequestPasskey {device} -> {int(pin):06d}")
+        return dbus.UInt32(int(pin))
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
@@ -145,39 +115,6 @@ class Agent(dbus.service.Object):
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Cancel(self):
         log("Cancel")
-        self._cancel = True
-        self._handshake = False
-        self._clear_pin_timer()
-
-    def pair_unpaired_connected(self):
-        if self._handshake:
-            return True
-        try:
-            om = dbus.Interface(
-                self._bus.get_object("org.bluez", "/"),
-                "org.freedesktop.DBus.ObjectManager",
-            )
-            for path, ifaces in om.GetManagedObjects().items():
-                dev = ifaces.get("org.bluez.Device1")
-                if not dev:
-                    continue
-                if dev.get("Paired") or not dev.get("Connected"):
-                    self._pairing.discard(str(path))
-                    continue
-                path_s = str(path)
-                if path_s in self._pairing:
-                    continue
-                self._pairing.add(path_s)
-                log(f"Pi initiating PIN pair {path_s} {dev.get('Address')}")
-                try:
-                    dbus.Interface(
-                        self._bus.get_object("org.bluez", path), "org.bluez.Device1"
-                    ).Pair()
-                except dbus.exceptions.DBusException as e:
-                    log(f"Pair {path_s}: {e.get_dbus_name()}")
-        except dbus.exceptions.DBusException:
-            pass
-        return True
 
 
 def main():
@@ -194,6 +131,8 @@ def main():
         )
 
     def claim_agent():
+        if agent.in_handshake():
+            return True
         try:
             mgr = manager()
             try:
@@ -224,9 +163,8 @@ def main():
         pass
     adapter_once()
     claim_agent()
-    log(f"{CAPABILITY} default agent (iPad must type PIN {pin_for_ipad() or '?'}; handshake {PIN_WAIT_SEC}s)")
+    log(f"{CAPABILITY} default agent (type PIN {pin_for_ipad() or '?'}; no drop {HANDSHAKE_SEC}s)")
     GLib.timeout_add(2000, claim_agent)
-    GLib.timeout_add(1000, agent.pair_unpaired_connected)
     GLib.MainLoop().run()
 
 
