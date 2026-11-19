@@ -124,6 +124,7 @@ set_classic_nap_adapter() {
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
     hciconfig_try hci0 sspmode 0
+    btmgmt_try io-cap 4
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
