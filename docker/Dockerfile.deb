@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg \
         cmake ninja-build build-essential git pkg-config python3 gzip file \
-        dpkg-dev fakeroot binutils \
+        dpkg-dev fakeroot binutils xz-utils zstd libdpkg-perl \
         nodejs npm \
         liblilv-dev libboost-dev \
         libsystemd-dev catch2 \
@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgoogle-perftools-dev \
         libpipewire-0.3-dev libbz2-dev libssl-dev librsvg2-dev \
         libnl-3-dev libnl-genl-3-dev \
+        libcairo2 libx11-6 libpango-1.0-0 librsvg2-2 libxrandr2 \
+        libpipewire-0.3-0 liblilv-0-0 libavahi-client3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -41,7 +43,8 @@ RUN cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DPIPEDAL_EXCLUDE_TESTS=ON \
         -DPIPEDAL_DISABLE_COPYRIGHT_BUILD=ON \
-        -DPIPEDAL_DEB_SIGN=OFF
+        -DPIPEDAL_DEB_SIGN=OFF \
+        -DPIPEDAL_DEB_SHLIBDEPS=OFF
 
 RUN cmake --build build -j"$(nproc)"
 
