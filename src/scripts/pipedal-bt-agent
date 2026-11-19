@@ -64,15 +64,18 @@ class Agent(dbus.service.Object):
         pin = read_pin()
         if not pin:
             raise Rejected("No PIN configured")
-        log(f"RequestPinCode {device} -> {pin}")
-        return pin
+        # iPadOS PIN pads are 6 digits. "1037" vs "001037" is a mismatch.
+        pin6 = pin.zfill(6)
+        log(f"RequestPinCode {device} -> {pin6}")
+        return pin6
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        value = pin_int()
-        if not value:
+        pin = read_pin()
+        if not pin:
             raise Rejected("No PIN configured")
-        log(f"RequestPasskey {device} -> {value}")
+        value = int(pin.zfill(6))
+        log(f"RequestPasskey {device} -> {value:06d}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
