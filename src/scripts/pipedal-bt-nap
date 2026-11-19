@@ -118,10 +118,12 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    btmgmt_try ssp off
+    # SSP on + DisplayOnly => iPad passkey keypad. SSP off => RequestPinCode
+    # and iPadOS shows no keypad (log: RequestPinCode then fail).
+    btmgmt_try ssp on
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 0
+    hciconfig_try hci0 sspmode 1
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
@@ -132,8 +134,9 @@ set_pairing_visible() {
     local on="$1"
     if [[ "$on" == 1 ]]; then
         btmgmt_try le off
+        btmgmt_try ssp on
         hciconfig_try hci0 class 0x020100
-        hciconfig_try hci0 sspmode 0
+        hciconfig_try hci0 sspmode 1
         hciconfig_try hci0 piscan
         adapter_set Pairable "variant:boolean:true"
         adapter_set DiscoverableTimeout "variant:uint32:0"
@@ -148,8 +151,9 @@ set_pairing_visible() {
         adapter_set Pairable "variant:boolean:false"
         adapter_set Discoverable "variant:boolean:false"
         hciconfig_try hci0 pscan
-        hciconfig_try hci0 sspmode 0
+        hciconfig_try hci0 sspmode 1
         btmgmt_try le off
+        btmgmt_try ssp on
         if [[ "$PAIRING_ACTIVE" == 1 ]]; then
             log "pairing window closed. adapter hidden; paired devices can still reconnect"
         fi

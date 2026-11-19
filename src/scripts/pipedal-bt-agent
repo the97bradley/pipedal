@@ -99,7 +99,7 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
     def DisplayPasskey(self, device, passkey, entered):
-        log(f"DisplayPasskey {device} {int(passkey):06d} entered={int(entered)}")
+        log(f"DisplayPasskey {device} type-this-on-iPad={int(passkey):06d} entered={int(entered)}")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Cancel(self):
