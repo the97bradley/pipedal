@@ -17,7 +17,7 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-CAPABILITY = "KeyboardDisplay"
+CAPABILITY = "KeyboardOnly"
 HANDSHAKE_SEC = 30
 
 
@@ -101,10 +101,8 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        # iOS will not complete legacy PIN. Allow the BR/EDR link; pipedal-bt-auth
-        # compares the Settings PIN before the PiPedal UI is reachable.
-        log(f"RequestConfirmation {device} passkey={int(passkey):06d} (NAP still PIN-gated)")
-        return
+        log(f"rejected Pi-sent passkey {int(passkey):06d} from {device} (iPad must type PIN)")
+        raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
