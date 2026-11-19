@@ -1,0 +1,27 @@
+---
+description: Always run this fork on the Pi. Never stock PiPedal.
+alwaysApply: true
+---
+
+# Load our fork. Always.
+
+This repository is **the97bradley/pipedal**. The live Raspberry Pi (`hostname pipedal`, user `the97bradley`) runs **this fork only**.
+
+## Never stock
+
+- Do **not** leave, restore, serve, overlay-on, or fall back to stock/upstream PiPedal (`rerdavies/pipedal`, Debian package `pipedal` 2.0.111, or any upstream release).
+- Do **not** make the UI work against stock `pipedald` (no fake Bluetooth settings, no try/catch that hides missing APIs so stock still “loads”).
+- Do **not** treat a Vite overlay on port 5173 as the live UI. Port **80** must be this fork.
+- Do **not** copy only the React files onto stock `/etc/pipedal/react` while stock `pipedald` is still the daemon.
+
+## Always this fork
+
+After any daemon, Bluetooth, or Settings UI change, **replace stock with this checkout**:
+
+- `pipedald`, `pipedaladmind`, `pipedalconfig`
+- `/etc/pipedal/react` (this tree’s Vite build)
+- `pipedal-bt-nap` and its systemd unit
+
+If sudo is required on the Pi, give the exact commands. Do not stop at “stock is still installed.”
+
+This project version must be **newer than the installed stock package** so `apt`/`dpkg` replaces it. Never tell anyone to keep 2.0.111.

@@ -40,8 +40,12 @@ WORKDIR /src
 RUN cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DPIPEDAL_EXCLUDE_TESTS=ON \
-    && cmake --build build -j"$(nproc)" \
-    && cmake --build build --target package \
+        -DPIPEDAL_DISABLE_COPYRIGHT_BUILD=ON \
+        -DPIPEDAL_DEB_SIGN=OFF
+
+RUN cmake --build build -j"$(nproc)"
+
+RUN cmake --build build --target package \
     && mkdir -p /out \
     && cp -a build/*.deb /out/
 

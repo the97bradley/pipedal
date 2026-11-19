@@ -905,7 +905,15 @@ set (DEBIAN_COPYRIGHT_EXTRA_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../debian/fill.copy
 
 # generate Copyright section of settings page.
 # warning: there may be multiple versions. Pick the latest.
-if(EXISTS "/usr/share/doc/libboost1.83-dev")
+if(EXISTS "/usr/share/doc/libboost1.88-dev")
+   set (BOOST_COPYRIGHT_DIR "libboost1.88-dev")
+elseif(EXISTS "/usr/share/doc/libboost1.87-dev")
+   set (BOOST_COPYRIGHT_DIR "libboost1.87-dev")
+elseif(EXISTS "/usr/share/doc/libboost1.86-dev")
+   set (BOOST_COPYRIGHT_DIR "libboost1.86-dev")
+elseif(EXISTS "/usr/share/doc/libboost1.84-dev")
+   set (BOOST_COPYRIGHT_DIR "libboost1.84-dev")
+elseif(EXISTS "/usr/share/doc/libboost1.83-dev")
    set (BOOST_COPYRIGHT_DIR "libboost1.83-dev")
 elseif(EXISTS "/usr/share/doc/libboost1.74-dev")
    set (BOOST_COPYRIGHT_DIR "libboost1.74-dev")
@@ -913,25 +921,34 @@ elseif(EXISTS "/usr/share/doc/libboost1.71-dev")
    set (BOOST_COPYRIGHT_DIR "libboost1.71-dev")
 elseif(EXISTS "/usr/share/doc/libboost1.67-dev")
    set (BOOST_COPYRIGHT_DIR "libboost1.67-dev")
-# else()
-#     message(FATAL_ERROR "Boost libary version has changed. Please update me.")
+else()
+    file(GLOB _boost_doc_dirs "/usr/share/doc/libboost*-dev")
+    if(_boost_doc_dirs)
+        list(SORT _boost_doc_dirs)
+        list(GET _boost_doc_dirs -1 _boost_doc_dir)
+        get_filename_component(BOOST_COPYRIGHT_DIR "${_boost_doc_dir}" NAME)
+    endif()
 endif()
 
 
-add_custom_command(OUTPUT ${REACT_NOTICES_FILE}
-    COMMAND "$<TARGET_FILE:processcopyrights>"
-        --output ${REACT_NOTICES_FILE}
-        --projectCopyright ${DEBIAN_COPYRIGHT_FILE}
-        liblilv-0-0 ${BOOST_COPYRIGHT_DIR} lv2-dev librsvg2-2 libpango-1.0-0 libx11-6 libxrandr2
-WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS ${DEBIAN_COPYRIGHT_FILE} ${DEBIAN_COPYRIGHT_EXTRA_FILE} "$<TARGET_FILE:processcopyrights>"
-    COMMENT "Updating copyright notices."
-)
+if(BOOST_COPYRIGHT_DIR)
+    add_custom_command(OUTPUT ${REACT_NOTICES_FILE}
+        COMMAND "$<TARGET_FILE:processcopyrights>"
+            --output ${REACT_NOTICES_FILE}
+            --projectCopyright ${DEBIAN_COPYRIGHT_FILE}
+            liblilv-0-0 ${BOOST_COPYRIGHT_DIR} lv2-dev librsvg2-2 libpango-1.0-0 libx11-6 libxrandr2
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS ${DEBIAN_COPYRIGHT_FILE} ${DEBIAN_COPYRIGHT_EXTRA_FILE} "$<TARGET_FILE:processcopyrights>"
+        COMMENT "Updating copyright notices."
+    )
 
     add_custom_target (
         CopyrightBuild ALL
         DEPENDS ${REACT_NOTICES_FILE}
     )
+else()
+    message(WARNING "No /usr/share/doc/libboost*-dev found; skipping CopyrightBuild")
+endif()
 endif()
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31)

@@ -29,6 +29,6 @@ echo
 echo "Debs:"
 ls -lh dist-deb/*.deb
 echo
-echo "Copy to the Pi and install (package version may be older than 2.0.111):"
+echo "Copy to the Pi and install this fork over stock:"
 echo "  scp dist-deb/*.deb the97bradley@pipedal:~/"
-echo "  ssh the97bradley@pipedal 'sudo apt-get install --allow-downgrades -y ./pipedal_*.deb'"
+echo "  ssh the97bradley@pipedal 'sudo apt-get install -y ./pipedal_*.deb'"

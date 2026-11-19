@@ -948,12 +948,10 @@ const SettingsDialog = withStyles(
                                 )
                             }
 
-                            {(this.state.hasWifiDevice || this.state.isAndroidHosted || this.state.bluetoothConfigSettings.valid) &&
-                                (
-                                    <div>
-                                        <Divider />
-                                        <div >
-                                            <Typography className={classes.sectionHead} display="block" variant="caption" color="secondary">CONNECTION</Typography>
+                            <div>
+                                <Divider />
+                                <div >
+                                    <Typography className={classes.sectionHead} display="block" variant="caption" color="secondary">CONNECTION</Typography>
 
                                             {this.state.hasWifiDevice && (
                                                 <ButtonBase
@@ -973,7 +971,7 @@ const SettingsDialog = withStyles(
                                             )}
 
                                             <ButtonBase
-                                                className={classes.setting} disabled={!this.state.bluetoothConfigSettings.valid}
+                                                className={classes.setting}
                                                 onClick={() => this.setState({ showBluetoothConfigDialog: true })}  >
                                                 <SelectHoverBackground selected={false} showHover={true} />
                                                 <div style={{ width: "100%" }}>
@@ -1006,7 +1004,6 @@ const SettingsDialog = withStyles(
                                         </div>
 
                                     </div>
-                                )}
                             {(!this.props.onboarding) ? (
                                 <div >
                                     <Divider />

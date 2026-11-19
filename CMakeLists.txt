@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.16.0)
 project(pipedal 
-    VERSION 2.0.110
+    VERSION 2.0.112
     DESCRIPTION "PiPedal Guitar Effect Pedal For Raspberry Pi"
     HOMEPAGE_URL "https://rerdavies.github.io/pipedal"
 )
 
-set (DISPLAY_VERSION "PiPedal v2.0.110-Release")
+set (DISPLAY_VERSION "PiPedal v2.0.112-Release")
 
 option(PIPEDAL_DISABLE_COPYRIGHT_BUILD "Skip generation of copyright notices (use on non-Debian distros)" OFF)
 option(PIPEDAL_EXCLUDE_TESTS "Exclude test targets from default build" OFF)
@@ -16,7 +16,7 @@ set(PIPEDAL_T3K_PUBLISHABLE_KEY "t3k_pub_bHrH8btdwXXTtxz5ryEU8sNLF-2TGRT9")
 # Determine Debian-compatible architecture name (portable across distros)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(DEBIAN_ARCHITECTURE "amd64")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
     set(DEBIAN_ARCHITECTURE "arm64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "armv7l")
     set(DEBIAN_ARCHITECTURE "armhf")
@@ -93,8 +93,11 @@ message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 if ("${DEBIAN_ARCHITECTURE}" MATCHES "arm64")
 
     # select LV2 source directory for the current build architecture
-
-    set(LV2_SOURCE_DIRECTORY ${PROJECT_SOURCE_DIR}/lv2/${CMAKE_SYSTEM_PROCESSOR}/ToobAmp.lv2)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/lv2/${CMAKE_SYSTEM_PROCESSOR}/ToobAmp.lv2")
+        set(LV2_SOURCE_DIRECTORY ${PROJECT_SOURCE_DIR}/lv2/${CMAKE_SYSTEM_PROCESSOR}/ToobAmp.lv2)
+    else()
+        set(LV2_SOURCE_DIRECTORY ${PROJECT_SOURCE_DIR}/lv2/aarch64/ToobAmp.lv2)
+    endif()
 
     install (DIRECTORY ${LV2_SOURCE_DIRECTORY} 
         DESTINATION /usr/lib/lv2
@@ -140,8 +143,11 @@ else()
     set (CPACK_STRIP_FILES true)
 endif()
 
-set(CPACK_DEBIAN_PACKAGE_SIGN_ALGORITHM "detached")
-set(CPACK_DEBIAN_PACKAGE_SIGN_TYPE "origin")
+option(PIPEDAL_DEB_SIGN "Detached-sign Debian packages (needs a GPG key)" OFF)
+if(PIPEDAL_DEB_SIGN)
+    set(CPACK_DEBIAN_PACKAGE_SIGN_ALGORITHM "detached")
+    set(CPACK_DEBIAN_PACKAGE_SIGN_TYPE "origin")
+endif()
 
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA 
    "${CMAKE_CURRENT_SOURCE_DIR}/debian/postinst;${CMAKE_CURRENT_SOURCE_DIR}/debian/prerm"
