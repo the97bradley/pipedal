@@ -39,8 +39,20 @@ def read_pin():
     return ""
 
 
-def pin_int():
+def pin_for_ipad():
     pin = read_pin()
+    if not pin:
+        return ""
+    # iPadOS PIN pads are 6 digits. HCI PIN length 4 ("1037") was compared
+    # immediately and the iPad dropped the link with Authentication Failure
+    # in ~100ms — before a human could finish typing.
+    if len(pin) < 6:
+        pin = pin.zfill(6)
+    return pin
+
+
+def pin_int():
+    pin = pin_for_ipad()
     return int(pin) if pin else 0
 
 
@@ -60,7 +72,7 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        pin = read_pin()
+        pin = pin_for_ipad()
         if not pin:
             raise Rejected("No PIN configured")
         log(f"RequestPinCode {device} -> {pin} (iPad must type these digits)")
@@ -68,11 +80,11 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        pin = read_pin()
+        pin = pin_for_ipad()
         if not pin:
             raise Rejected("No PIN configured")
         value = int(pin)
-        log(f"RequestPasskey {device} -> {value}")
+        log(f"RequestPasskey {device} -> {value:06d}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
@@ -85,9 +97,9 @@ class Agent(dbus.service.Object):
         expected = pin_int()
         got = int(passkey)
         if expected and got == expected:
-            log(f"RequestConfirmation {device} matched PIN {expected}")
+            log(f"RequestConfirmation {device} matched PIN {expected:06d}")
             return
-        log(f"rejected numeric-comparison {got:06d} from {device} (PIN {expected} required)")
+        log(f"rejected numeric-comparison {got:06d} from {device} (PIN {expected:06d} required)")
         raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
@@ -116,7 +128,7 @@ def main():
             bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1"
         )
 
-    def claim():
+    def claim_agent():
         try:
             mgr = manager()
             try:
@@ -126,6 +138,9 @@ def main():
             mgr.RequestDefaultAgent(AGENT_PATH)
         except dbus.exceptions.DBusException:
             pass
+        return True
+
+    def adapter_once():
         try:
             props = dbus.Interface(
                 bus.get_object("org.bluez", "/org/bluez/hci0"),
@@ -137,15 +152,17 @@ def main():
             props.Set("org.bluez.Adapter1", "Discoverable", dbus.Boolean(True))
         except dbus.exceptions.DBusException:
             pass
-        return True
 
     try:
         manager().UnregisterAgent(AGENT_PATH)
     except dbus.exceptions.DBusException:
         pass
-    claim()
-    log(f"{CAPABILITY} default agent (iPad must type PIN {read_pin() or '?'})")
-    GLib.timeout_add(200, claim)
+    adapter_once()
+    claim_agent()
+    log(f"{CAPABILITY} default agent (iPad must type PIN {pin_for_ipad() or '?'})")
+    # Re-claim the agent only. Setting adapter props on a 200ms timer was
+    # firing during PIN Code Reply and the iPad dropped with Auth Failure.
+    GLib.timeout_add(2000, claim_agent)
     GLib.MainLoop().run()
 
 

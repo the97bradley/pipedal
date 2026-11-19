@@ -131,11 +131,8 @@ set_classic_nap_adapter() {
 set_pairing_visible() {
     local on="$1"
     if [[ "$on" == 1 ]]; then
-        btmgmt_try le off
-        btmgmt_try ssp off
-        hciconfig_try hci0 class 0x020100
-        hciconfig_try hci0 sspmode 0
-        hciconfig_try hci0 piscan
+        # DBus only. btmgmt/hciconfig here races PIN Code Reply and iPad
+        # drops the ACL with Authentication Failure.
         adapter_set Pairable "variant:boolean:true"
         adapter_set DiscoverableTimeout "variant:uint32:0"
         adapter_set Discoverable "variant:boolean:true"
@@ -148,10 +145,6 @@ set_pairing_visible() {
         rm -f "$PAIRING_FLAG"
         adapter_set Pairable "variant:boolean:false"
         adapter_set Discoverable "variant:boolean:false"
-        hciconfig_try hci0 pscan
-        hciconfig_try hci0 sspmode 0
-        btmgmt_try le off
-        btmgmt_try ssp off
         if [[ "$PAIRING_ACTIVE" == 1 ]]; then
             log "pairing window closed. adapter hidden; paired devices can still reconnect"
         fi
@@ -323,6 +316,7 @@ TRUST_PID=$!
 
 (
     last_name=""
+    ticks=0
     while true; do
         load_config
         printf '* %s\n' "$PIN" > "$PIN_FILE"
@@ -331,9 +325,21 @@ TRUST_PID=$!
             last_name="$NAME"
         fi
         if [[ "$PAIRING_UNTIL" == 1 ]]; then
-            set_pairing_visible 1
+            if [[ "$PAIRING_ACTIVE" != 1 ]]; then
+                set_pairing_visible 1
+            fi
         else
-            set_pairing_visible 0
+            if [[ "$PAIRING_ACTIVE" == 1 ]]; then
+                set_pairing_visible 0
+            fi
+        fi
+        ticks=$((ticks + 1))
+        if (( ticks % 15 == 0 )); then
+            settings="$(timeout 2 btmgmt info 2>/dev/null || true)"
+            if printf '%s\n' "$settings" | grep "current settings" | grep -Eq " ssp| low energy"; then
+                log "radio drifted; reapplying classic NAP adapter"
+                set_classic_nap_adapter
+            fi
         fi
         sleep 2
     done
