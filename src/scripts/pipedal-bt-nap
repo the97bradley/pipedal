@@ -318,7 +318,6 @@ TRUST_PID=$!
 
 (
     last_name=""
-    ticks=0
     while true; do
         load_config
         printf '* %s\n' "$PIN" > "$PIN_FILE"
@@ -333,17 +332,6 @@ TRUST_PID=$!
         else
             if [[ "$PAIRING_ACTIVE" == 1 ]]; then
                 set_pairing_visible 0
-            fi
-        fi
-        ticks=$((ticks + 1))
-        if (( ticks % 15 == 0 )); then
-            settings="$(timeout 2 btmgmt info 2>/dev/null || true)"
-            if printf '%s\n' "$settings" | grep "current settings" | grep -q "low energy"; then
-                log "radio drifted; reapplying classic NAP adapter"
-                set_classic_nap_adapter
-            elif ! printf '%s\n' "$settings" | grep "current settings" | grep -q " ssp"; then
-                log "SSP dropped; turning it back on for iOS"
-                set_classic_nap_adapter
             fi
         fi
         sleep 2
