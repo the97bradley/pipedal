@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.16.0)
 project(pipedal 
-    VERSION 2.0.113
+    VERSION 2.0.114
     DESCRIPTION "PiPedal Guitar Effect Pedal For Raspberry Pi"
     HOMEPAGE_URL "https://rerdavies.github.io/pipedal"
 )
 
-set (DISPLAY_VERSION "PiPedal v2.0.113-Release")
+set (DISPLAY_VERSION "PiPedal v2.0.114-Release")
 
 option(PIPEDAL_DISABLE_COPYRIGHT_BUILD "Skip generation of copyright notices (use on non-Debian distros)" OFF)
 option(PIPEDAL_EXCLUDE_TESTS "Exclude test targets from default build" OFF)
@@ -139,7 +139,7 @@ set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
 
 
 
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libicu-dev ,lv2-dev,iw, ffmpeg, authbind, curl, gpg, alsa-base| pipewire, alsa-utils, bluez, bluez-tools, dnsmasq-base | dnsmasq")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libicu-dev ,lv2-dev,iw, ffmpeg, authbind, curl, gpg, alsa-base| pipewire, alsa-utils, bluez, bluez-tools, dnsmasq-base | dnsmasq, python3, python3-dbus, python3-gi")
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE ${DEBIAN_ARCHITECTURE})
 set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

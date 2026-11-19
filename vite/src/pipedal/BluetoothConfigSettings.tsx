@@ -34,7 +34,7 @@ export default class BluetoothConfigSettings {
     enable: boolean = true;
     deviceName: string = "pipedal";
     pin: string = "";
-    allowNewDevices: boolean = false;
+    allowNewDevices: boolean = true;
     pairingUntil: number = 0;
 
     getSummaryText() {
@@ -44,10 +44,9 @@ export default class BluetoothConfigSettings {
         if (!this.enable) {
             return "Disabled.";
         }
-        let now = Date.now() / 1000;
-        if (this.allowNewDevices && this.pairingUntil > now) {
-            return "Pairing open " + Math.max(1, Math.round(this.pairingUntil - now)) + "s. PIN required. (" + this.deviceName + ")";
+        if (!this.allowNewDevices) {
+            return "Hidden. Paired devices only. (" + this.deviceName + " · 172.21.0.1)";
         }
-        return "Hidden. Paired devices only. (" + this.deviceName + " · 172.21.0.1)";
+        return "PIN required. (" + this.deviceName + " · 172.21.0.1)";
     }
 }

@@ -50,7 +50,7 @@ namespace pipedal {
         std::string pin_;
         // Adapter is hidden unless this is on. Stays on for
         // BLUETOOTH_PAIRING_WINDOW_SECONDS after Save().
-        bool allowNewDevices_ = false;
+        bool allowNewDevices_ = true;
         int64_t pairingUntil_ = 0;
         bool valid_ = false;
 

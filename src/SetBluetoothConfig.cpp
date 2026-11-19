@@ -119,6 +119,7 @@ void pipedal::OnBluetoothInstall()
         settings.deviceName_ = "pipedal";
     }
     settings.EnsurePin();
+    settings.allowNewDevices_ = true;
     SetBluetoothConfig(settings);
 }
 

@@ -964,7 +964,11 @@ install (TARGETS pipedald pipedaladmind pipedal_update DESTINATION ${CMAKE_INSTA
    )
 
 install (PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal-bt-nap
+    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/pipedal-bt-agent
     DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin
+)
+install (FILES ${CMAKE_CURRENT_SOURCE_DIR}/dbus/pipedal-bluetooth.conf
+    DESTINATION /etc/dbus-1/system.d
 )
 
    

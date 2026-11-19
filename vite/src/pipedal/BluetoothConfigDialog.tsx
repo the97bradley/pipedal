@@ -56,8 +56,7 @@ const BluetoothConfigDialog =
                 enabled: this.props.bluetoothConfigSettings.enable !== false,
                 name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
                 pin: this.props.bluetoothConfigSettings.pin || "",
-                allowNewDevices: !!this.props.bluetoothConfigSettings.allowNewDevices
-                    && (this.props.bluetoothConfigSettings.pairingUntil || 0) * 1000 > Date.now(),
+                allowNewDevices: this.props.bluetoothConfigSettings.allowNewDevices !== false,
                 nameError: false,
                 nameErrorMessage: "",
                 pinError: false,
@@ -71,8 +70,7 @@ const BluetoothConfigDialog =
                     enabled: this.props.bluetoothConfigSettings.enable !== false,
                     name: this.props.bluetoothConfigSettings.deviceName || "pipedal",
                     pin: this.props.bluetoothConfigSettings.pin || "",
-                    allowNewDevices: !!this.props.bluetoothConfigSettings.allowNewDevices
-                        && (this.props.bluetoothConfigSettings.pairingUntil || 0) * 1000 > Date.now(),
+                    allowNewDevices: this.props.bluetoothConfigSettings.allowNewDevices !== false,
                     nameError: false,
                     nameErrorMessage: "",
                     pinError: false,
@@ -165,25 +163,19 @@ const BluetoothConfigDialog =
                                     disabled={!this.state.enabled}
                                 />
                             }
-                            label="Allow new devices (2 minutes)"
+                            label="Discoverable"
                         />
                         <Typography variant="body2" color="textSecondary" style={{ lineHeight: "1.45em" }}>
-                            Off: hidden. Already-paired iPads still reconnect. On: visible for 2 minutes and new
-                            devices must enter the PIN. Forget any old pairing first — a BLE “Connected” with no
-                            PIN is not the network.
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary" style={{ marginTop: 16, lineHeight: "1.45em" }}>
-                            Bluetooth is a second network next to Wi-Fi. If the iPad is already on the same Wi-Fi
-                            as the Pi, use <b>http://pipedal.local</b> instead — you do not need Bluetooth.
+                            New devices must enter PIN {this.state.pin || "••••"}. Just Works pairing is rejected.
+                            Forget any old “Connected” pairing that did not ask for a PIN — that was not the network.
                         </Typography>
                         <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
                             <ol style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0 }}>
-                                <li>On the iPad: Settings → Bluetooth → tap the <b>ⓘ</b> next to <b>{this.state.name || "pipedal"}</b> → Forget This Device.</li>
-                                <li>Turn on <b>Allow new devices</b> here and tap OK.</li>
-                                <li>On the iPad wait for <b>{this.state.name || "pipedal"}</b>, tap it, enter PIN <b>{this.state.pin || "••••"}</b>.</li>
-                                <li>When it says Connected, leave Bluetooth and open the main Settings list. If <b>Ethernet</b> appears, leave it on Automatic (DHCP). That is the PAN. Bluetooth “Connected” alone is not a network.</li>
-                                <li>Safari: <b>http://172.21.0.1</b> (not pipedal.local over Bluetooth — there is no DNS on this link).</li>
+                                <li>iPad: Settings → Bluetooth → ⓘ on <b>{this.state.name || "pipedal"}</b> → Forget This Device.</li>
+                                <li>Tap <b>{this.state.name || "pipedal"}</b> and enter PIN <b>{this.state.pin || "••••"}</b>.</li>
+                                <li>Wait a few seconds. Open the main Settings list. <b>Ethernet</b> is the Bluetooth network — leave it Automatic (DHCP). Bluetooth “Connected” alone is not enough.</li>
+                                <li>Safari: <b>http://172.21.0.1</b></li>
                             </ol>
                         </Typography>
                     </DialogContent>

@@ -60,27 +60,16 @@ if not (pin.isdigit() and 4 <= len(pin) <= 8):
     data["pin"] = pin
     data["enable"] = True
     changed = True
-now = int(time.time())
-until = 0
-try:
-    until = int(data.get("pairingUntil") or 0)
-except Exception:
-    until = 0
-allow = bool(data.get("allowNewDevices"))
-if allow and until <= now:
-    data["allowNewDevices"] = False
-    data["pairingUntil"] = 0
-    until = 0
-    changed = True
-elif not allow:
-    until = 0
+allow = data.get("allowNewDevices")
+if allow is None:
+    allow = True
 if changed:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f)
 print(name)
 print(pin)
-print(until)
+print(1 if allow else 0)
 PY
 )"
     NAME="$(printf '%s\n' "$loaded" | sed -n '1p')"
@@ -93,7 +82,7 @@ PY
         log "failed to load a valid Bluetooth PIN"
         exit 1
     fi
-    if [[ ! "$PAIRING_UNTIL" =~ ^[0-9]+$ ]]; then
+    if [[ "$PAIRING_UNTIL" != "1" ]]; then
         PAIRING_UNTIL=0
     fi
 }
@@ -233,7 +222,7 @@ modprobe bridge >/dev/null 2>&1 || true
 modprobe dummy >/dev/null 2>&1 || true
 
 load_config
-log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (hidden until pairing window; PIN ${PIN})"
+log "starting NAP as '${NAME}' on ${BRIDGE} (${ADDR}/${PREFIX}) (PIN ${PIN}; Just Works rejected)"
 
 systemctl start bluetooth >/dev/null 2>&1 || true
 
@@ -249,7 +238,13 @@ if ! bluetoothctl show >/dev/null 2>&1; then
 fi
 
 killall bt-agent >/dev/null 2>&1 || true
+killall pipedal-bt-agent >/dev/null 2>&1 || true
 set_classic_nap_adapter
+if [[ "$PAIRING_UNTIL" == 1 ]]; then
+    set_pairing_visible 1
+else
+    set_pairing_visible 0
+fi
 
 ip link add name "$BRIDGE" type bridge 2>/dev/null || true
 ip link add name "$DUMMY" type dummy 2>/dev/null || true
@@ -289,6 +284,16 @@ if [[ -z "$registered" ]]; then
     exit 1
 fi
 log "registered NAP on ${registered}"
+sleep 2
+for adapter in /org/bluez/hci0 /org/bluez/hci1; do
+    dbus-send --system --dest=org.bluez --print-reply --type=method_call \
+        "$adapter" org.bluez.NetworkServer1.Register string:nap string:"$BRIDGE" \
+        >/dev/null 2>&1 || true
+done
+if command -v hciconfig >/dev/null 2>&1; then
+    hciconfig hci0 class 0x020100 >/dev/null 2>&1 || true
+    log "adapter $(hciconfig hci0 class 2>/dev/null | tr '\n' ' ')"
+fi
 
 mkdir -p "$RUN_DIR"
 umask 077
@@ -296,45 +301,20 @@ printf '* %s\n' "$PIN" > "$PIN_FILE"
 chmod 600 "$PIN_FILE"
 rm -f "$PAIRING_FLAG"
 
-# Default-agent that feeds our PIN only while the pairing window is open.
-# Rejects new pairing when hidden. Authorize NAP for already-paired devices.
-coproc BTCTL { stdbuf -oL bluetoothctl --agent KeyboardDisplay; }
-BTCTL_PID="${BTCTL_PID:-}"
-if [[ -n "${BTCTL[1]:-}" ]]; then
-    printf 'power on\nsystem-alias %s\npairable off\ndiscoverable off\ndefault-agent\n' "$NAME" >&"${BTCTL[1]}"
-fi
-(
-    while IFS= read -r line <&"${BTCTL[0]}"; do
-        low="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
-        if [[ "$low" == *"enter pin"* || "$low" == *"pin code"* || "$low" == *"enter passkey"* ]]; then
-            if [[ -f "$PAIRING_FLAG" ]]; then
-                printf '%s\n' "$PIN" >&"${BTCTL[1]}"
-            else
-                printf 'no\n' >&"${BTCTL[1]}"
-            fi
-        elif [[ "$low" == *"confirm passkey"* || "$low" == *"request confirmation"* ]]; then
-            if [[ -f "$PAIRING_FLAG" && "$line" == *"$PIN"* ]]; then
-                printf 'yes\n' >&"${BTCTL[1]}"
-            else
-                printf 'no\n' >&"${BTCTL[1]}"
-            fi
-        elif [[ "$low" == *"authorize"* ]]; then
-            if [[ -f "$PAIRING_FLAG" ]]; then
-                printf 'yes\n' >&"${BTCTL[1]}"
-            else
-                # Already-paired iPad reconnecting the NAP profile.
-                printf 'yes\n' >&"${BTCTL[1]}"
-            fi
-        fi
-    done
-) &
-AGENT_READER_PID=$!
-log "PIN agent: bluetoothctl KeyboardDisplay (PIN only during pairing window)"
+python3 /usr/sbin/pipedal-bt-agent "$PIN_FILE" &
+AGENT_PID=$!
+log "PIN agent: pipedal-bt-agent (Just Works rejected)"
 
 (
     while true; do
         bluetoothctl devices Paired 2>/dev/null | awk '{print $2}' | while read -r mac; do
-            [[ -n "$mac" ]] && bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+            [[ -z "$mac" ]] && continue
+            bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+            connected="$(bluetoothctl info "$mac" 2>/dev/null | awk '/Connected:/ {print $2; exit}')"
+            if [[ "$connected" != "yes" ]]; then
+                log "connecting $mac for NAP"
+                bluetoothctl connect "$mac" >/dev/null 2>&1 || true
+            fi
         done
         sleep 8
     done
@@ -342,7 +322,6 @@ log "PIN agent: bluetoothctl KeyboardDisplay (PIN only during pairing window)"
 TRUST_PID=$!
 
 (
-    last_pin=""
     last_name=""
     while true; do
         load_config
@@ -351,9 +330,7 @@ TRUST_PID=$!
             bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
             last_name="$NAME"
         fi
-        last_pin="$PIN"
-        now="$(date +%s)"
-        if [[ "$PAIRING_UNTIL" -gt "$now" ]]; then
+        if [[ "$PAIRING_UNTIL" == 1 ]]; then
             set_pairing_visible 1
         else
             set_pairing_visible 0
@@ -365,19 +342,23 @@ KEEPALIVE_PID=$!
 
 cat > "$DNSMASQ_CONF" <<EOF
 # Isolated PAN: no default route, so the iPad keeps using Wi-Fi for internet.
+# DNS on pan0 only so iPadOS keeps the Ethernet/PAN interface up.
 interface=${BRIDGE}
 except-interface=lo
 bind-interfaces
-port=0
+listen-address=${ADDR}
+port=53
+address=/pipedal.local/${ADDR}
 dhcp-range=${DHCP_START},${DHCP_END},255.255.255.0,12h
 dhcp-option=option:router
+dhcp-option=6,${ADDR}
 log-dhcp
 EOF
 
 dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
 DNSMASQ_PID=$!
 
-log "ready. Hidden. Open Settings → Bluetooth remote → Allow new devices, then pair the iPad with PIN ${PIN}. Safari http://${ADDR}"
+log "ready. Pair '${NAME}' with PIN ${PIN}, wait for Ethernet/PAN, then http://${ADDR}"
 
 wait "$DNSMASQ_PID"
 exit $?

@@ -127,12 +127,6 @@ void BluetoothConfigSettings::Load()
         {
             deviceName_ = "pipedal";
         }
-        auto now = static_cast<int64_t>(std::time(nullptr));
-        if (pairingUntil_ <= now)
-        {
-            pairingUntil_ = 0;
-            allowNewDevices_ = false;
-        }
         valid_ = HasBluetoothAdapter();
     }
     catch (const std::exception &e)
@@ -164,15 +158,7 @@ void BluetoothConfigSettings::Save()
     {
         throw std::runtime_error("Bluetooth PIN must be 4 to 8 digits.");
     }
-    auto now = static_cast<int64_t>(std::time(nullptr));
-    if (toSave.allowNewDevices_)
-    {
-        if (toSave.pairingUntil_ <= now)
-        {
-            toSave.pairingUntil_ = now + BLUETOOTH_PAIRING_WINDOW_SECONDS;
-        }
-    }
-    else
+    if (!toSave.allowNewDevices_)
     {
         toSave.pairingUntil_ = 0;
     }

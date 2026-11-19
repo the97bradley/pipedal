@@ -1,0 +1,114 @@
+#!/usr/bin/python3
+"""BlueZ pairing agent: our PIN only. Rejects Just Works."""
+import os
+import sys
+import dbus
+import dbus.service
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+PIN_FILE = "/run/pipedal/bt-pin"
+AGENT_PATH = "/org/pipedal/bt_agent"
+CAPABILITY = "KeyboardDisplay"
+
+
+def read_pin():
+    try:
+        with open(PIN_FILE, encoding="utf-8") as f:
+            line = f.readline().strip()
+        if line.startswith("* "):
+            line = line[2:].strip()
+        if line.isdigit() and 4 <= len(line) <= 8:
+            return line
+    except OSError:
+        pass
+    return ""
+
+
+def pin_int():
+    pin = read_pin()
+    return int(pin) if pin else 0
+
+
+class Rejected(dbus.DBusException):
+    _dbus_error_name = "org.bluez.Error.Rejected"
+
+
+class Agent(dbus.service.Object):
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Release(self):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def AuthorizeService(self, device, uuid):
+        # NAP/PANU must be allowed after a successful PIN pair.
+        return
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        pin = read_pin()
+        if not pin:
+            raise Rejected("No PIN configured")
+        print(f"pipedal-bt-agent: PIN request from {device}", file=sys.stderr)
+        return pin
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
+        value = pin_int()
+        if not value:
+            raise Rejected("No PIN configured")
+        print(f"pipedal-bt-agent: passkey request from {device}", file=sys.stderr)
+        return dbus.UInt32(value)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        print(f"pipedal-bt-agent: rejected Just Works from {device}", file=sys.stderr)
+        raise Rejected("PIN required")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device, passkey):
+        expected = pin_int()
+        if expected and int(passkey) == expected:
+            return
+        print(
+            f"pipedal-bt-agent: rejected passkey {int(passkey)} from {device}",
+            file=sys.stderr,
+        )
+        raise Rejected("PIN mismatch")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def DisplayPinCode(self, device, pincode):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device, passkey, entered):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Cancel(self):
+        pass
+
+
+def main():
+    global PIN_FILE
+    if len(sys.argv) >= 2:
+        PIN_FILE = sys.argv[1]
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    Agent(bus, AGENT_PATH)
+    manager = dbus.Interface(
+        bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1"
+    )
+    try:
+        manager.UnregisterAgent(AGENT_PATH)
+    except dbus.exceptions.DBusException:
+        pass
+    manager.RegisterAgent(AGENT_PATH, CAPABILITY)
+    manager.RequestDefaultAgent(AGENT_PATH)
+    print("pipedal-bt-agent: KeyboardDisplay default agent (PIN required)", file=sys.stderr)
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    main()
