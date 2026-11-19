@@ -118,12 +118,11 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    # iOS rejects legacy PIN (sspmode 0) with Authentication Failure ~100ms
-    # after PIN Code Reply — after the keypad, which is the iPad error.
-    btmgmt_try ssp on
+    # SSP off => iPad keypad (type-in PIN). SSP on => Pi sends a random code.
+    btmgmt_try ssp off
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 1
+    hciconfig_try hci0 sspmode 0
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"

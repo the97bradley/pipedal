@@ -13,8 +13,8 @@ systemctl --user --machine="${SUDO_USER:-the97bradley}@.host" disable --now pipe
 pkill -u "${SUDO_USER:-the97bradley}" -f "bluetoothctl" 2>/dev/null || true
 
 hciconfig hci0 up || true
-# iOS Authentication Failure after PIN entry if SSP is off.
-hciconfig hci0 sspmode 1
+# Type-in PIN on the iPad. SSP numeric comparison lets anyone tap Pair.
+hciconfig hci0 sspmode 0
 hciconfig hci0 class 0x020100
 hciconfig hci0 piscan || true
 
