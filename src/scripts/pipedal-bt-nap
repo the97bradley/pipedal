@@ -87,59 +87,31 @@ PY
     fi
 }
 
+hciconfig_try() {
+    timeout 2 hciconfig "$@" >/dev/null 2>&1 || true
+}
+
 set_classic_nap_adapter() {
-    # NAP is a classic (BR/EDR) service. If LE stays on, iPadOS pairs BLE
-    # with Just Works: Connected, no PIN, no Ethernet/PAN.
-    if command -v btmgmt >/dev/null 2>&1; then
-        btmgmt power off >/dev/null 2>&1 || true
-        btmgmt le off >/dev/null 2>&1 || true
-        btmgmt advertising off >/dev/null 2>&1 || true
-        btmgmt bredr on >/dev/null 2>&1 || true
-        btmgmt ssp off >/dev/null 2>&1 || true
-        btmgmt sc off >/dev/null 2>&1 || true
-        btmgmt io-cap 4 >/dev/null 2>&1 || true
-        btmgmt name "$NAME" >/dev/null 2>&1 || true
-        btmgmt connectable on >/dev/null 2>&1 || true
-        btmgmt pairable off >/dev/null 2>&1 || true
-        btmgmt discov off >/dev/null 2>&1 || true
-        btmgmt power on >/dev/null 2>&1 || true
-        btmgmt ssp off >/dev/null 2>&1 || true
-        btmgmt le off >/dev/null 2>&1 || true
-        btmgmt connectable on >/dev/null 2>&1 || true
-    fi
-    if command -v hciconfig >/dev/null 2>&1; then
-        # Networking + Computer so iPadOS can offer Ethernet/PAN.
-        hciconfig hci0 class 0x020100 >/dev/null 2>&1 || true
-        hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
-        hciconfig hci0 noleadv >/dev/null 2>&1 || true
-        # Page scan only: paired devices can reconnect; inquiry off so randos
-        # do not see us.
-        hciconfig hci0 pscan >/dev/null 2>&1 || true
-    fi
-    bluetoothctl power on >/dev/null 2>&1 || true
-    bluetoothctl system-alias "$NAME" >/dev/null 2>&1 || bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
-    bluetoothctl pairable off >/dev/null 2>&1 || true
-    bluetoothctl discoverable off >/dev/null 2>&1 || true
+    # Do not call btmgmt on Pi UART/bcm4345 — power/le/ssp commands hang forever.
+    hciconfig_try hci0 up
+    hciconfig_try hci0 class 0x020100
+    hciconfig_try hci0 sspmode 0
+    hciconfig_try hci0 noleadv
+    hciconfig_try hci0 piscan
+    timeout 3 bluetoothctl power on >/dev/null 2>&1 || true
+    timeout 3 bluetoothctl system-alias "$NAME" >/dev/null 2>&1 \
+        || timeout 3 bluetoothctl alias "$NAME" >/dev/null 2>&1 || true
 }
 
 set_pairing_visible() {
     local on="$1"
     if [[ "$on" == 1 ]]; then
-        if command -v btmgmt >/dev/null 2>&1; then
-            btmgmt pairable on >/dev/null 2>&1 || true
-            btmgmt discov on >/dev/null 2>&1 || true
-            btmgmt connectable on >/dev/null 2>&1 || true
-            btmgmt ssp off >/dev/null 2>&1 || true
-            btmgmt le off >/dev/null 2>&1 || true
-        fi
-        if command -v hciconfig >/dev/null 2>&1; then
-            hciconfig hci0 class 0x020100 >/dev/null 2>&1 || true
-            hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
-            hciconfig hci0 piscan >/dev/null 2>&1 || true
-        fi
-        bluetoothctl pairable on >/dev/null 2>&1 || true
-        bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
-        bluetoothctl discoverable on >/dev/null 2>&1 || true
+        hciconfig_try hci0 class 0x020100
+        hciconfig_try hci0 sspmode 0
+        hciconfig_try hci0 piscan
+        timeout 3 bluetoothctl pairable on >/dev/null 2>&1 || true
+        timeout 3 bluetoothctl discoverable-timeout 0 >/dev/null 2>&1 || true
+        timeout 3 bluetoothctl discoverable on >/dev/null 2>&1 || true
         touch "$PAIRING_FLAG"
         if [[ "$PAIRING_ACTIVE" != 1 ]]; then
             log "pairing window open. iPad must enter PIN ${PIN}"
@@ -147,19 +119,10 @@ set_pairing_visible() {
         PAIRING_ACTIVE=1
     else
         rm -f "$PAIRING_FLAG"
-        bluetoothctl pairable off >/dev/null 2>&1 || true
-        bluetoothctl discoverable off >/dev/null 2>&1 || true
-        if command -v btmgmt >/dev/null 2>&1; then
-            btmgmt pairable off >/dev/null 2>&1 || true
-            btmgmt discov off >/dev/null 2>&1 || true
-            btmgmt connectable on >/dev/null 2>&1 || true
-            btmgmt le off >/dev/null 2>&1 || true
-            btmgmt ssp off >/dev/null 2>&1 || true
-        fi
-        if command -v hciconfig >/dev/null 2>&1; then
-            hciconfig hci0 pscan >/dev/null 2>&1 || true
-            hciconfig hci0 sspmode 0 >/dev/null 2>&1 || true
-        fi
+        timeout 3 bluetoothctl pairable off >/dev/null 2>&1 || true
+        timeout 3 bluetoothctl discoverable off >/dev/null 2>&1 || true
+        hciconfig_try hci0 pscan
+        hciconfig_try hci0 sspmode 0
         if [[ "$PAIRING_ACTIVE" == 1 ]]; then
             log "pairing window closed. adapter hidden; paired devices can still reconnect"
         fi
@@ -239,21 +202,23 @@ fi
 
 killall bt-agent >/dev/null 2>&1 || true
 killall pipedal-bt-agent >/dev/null 2>&1 || true
+
+# Bridge must exist before NAP register. Adapter setup must not block this.
+ip link add name "$BRIDGE" type bridge 2>/dev/null || true
+ip link add name "$DUMMY" type dummy 2>/dev/null || true
+ip link set "$DUMMY" up >/dev/null 2>&1 || true
+ip link set "$DUMMY" master "$BRIDGE" >/dev/null 2>&1 || true
+ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
+ip addr add "${ADDR}/${PREFIX}" dev "$BRIDGE" 2>/dev/null || true
+ip link set "$BRIDGE" up
+ip link set "$BRIDGE" multicast on
+
 set_classic_nap_adapter
 if [[ "$PAIRING_UNTIL" == 1 ]]; then
     set_pairing_visible 1
 else
     set_pairing_visible 0
 fi
-
-ip link add name "$BRIDGE" type bridge 2>/dev/null || true
-ip link add name "$DUMMY" type dummy 2>/dev/null || true
-ip link set "$DUMMY" up >/dev/null 2>&1 || true
-ip link set "$DUMMY" master "$BRIDGE" >/dev/null 2>&1 || true
-ip addr flush dev "$BRIDGE" >/dev/null 2>&1 || true
-ip addr add "${ADDR}/${PREFIX}" dev "$BRIDGE"
-ip link set "$BRIDGE" up
-ip link set "$BRIDGE" multicast on
 
 registered=""
 if command -v bt-network >/dev/null 2>&1; then
@@ -310,11 +275,8 @@ log "PIN agent: pipedal-bt-agent (Just Works rejected)"
         bluetoothctl devices Paired 2>/dev/null | awk '{print $2}' | while read -r mac; do
             [[ -z "$mac" ]] && continue
             bluetoothctl trust "$mac" >/dev/null 2>&1 || true
-            connected="$(bluetoothctl info "$mac" 2>/dev/null | awk '/Connected:/ {print $2; exit}')"
-            if [[ "$connected" != "yes" ]]; then
-                log "connecting $mac for NAP"
-                bluetoothctl connect "$mac" >/dev/null 2>&1 || true
-            fi
+            # iPadOS must start the PANU session. Do not bluetoothctl-connect
+            # every paired Mac/phone — that races the iPad and fails.
         done
         sleep 8
     done
