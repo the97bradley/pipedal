@@ -1,11 +1,9 @@
 #!/usr/bin/python3
-"""BlueZ agent: pre-shared PIN entered on the iPad, checked on the Pi.
+"""BlueZ agent: pre-shared PIN typed on the iPad, compared on the Pi.
 
-iPadOS numeric comparison (RequestConfirmation with a random 6-digit code)
-is rejected — that is the tap-Pair path anyone nearby can complete.
-
-Legacy RequestPinCode and SSP RequestPasskey return the configured PIN so
-the iPad keypad can type it. DisplayOnly makes the iPad the keyboard side.
+SSP numeric comparison (RequestConfirmation with a random 6-digit code)
+is rejected. RequestPinCode returns the Settings PIN; BlueZ compares it
+to the digits the iPad sent. That is not the Pi typing the PIN on the iPad.
 """
 import os
 import sys
@@ -16,8 +14,9 @@ from gi.repository import GLib
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-# DisplayOnly + iPad DisplayYesNo => passkey entry on the iPad, not numeric compare.
-CAPABILITY = "DisplayOnly"
+# KeyboardDisplay + SSP off => HCI PIN Code Request. iPad keypad types the
+# Settings PIN; BlueZ compares it to what we return here.
+CAPABILITY = "KeyboardDisplay"
 
 
 def log(msg):
@@ -64,18 +63,16 @@ class Agent(dbus.service.Object):
         pin = read_pin()
         if not pin:
             raise Rejected("No PIN configured")
-        # iPadOS PIN pads are 6 digits. "1037" vs "001037" is a mismatch.
-        pin6 = pin.zfill(6)
-        log(f"RequestPinCode {device} -> {pin6}")
-        return pin6
+        log(f"RequestPinCode {device} -> {pin} (iPad must type these digits)")
+        return pin
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
         pin = read_pin()
         if not pin:
             raise Rejected("No PIN configured")
-        value = int(pin.zfill(6))
-        log(f"RequestPasskey {device} -> {value:06d}")
+        value = int(pin)
+        log(f"RequestPasskey {device} -> {value}")
         return dbus.UInt32(value)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
