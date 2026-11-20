@@ -5,9 +5,8 @@
 # stay on Wi-Fi (or cellular) for internet. DHCP does not advertise a default
 # route; the PAN is 172.21.0.0/24 with the Pi at 172.21.0.1.
 #
-# Hidden unless Settings → Bluetooth remote → Allow new devices (2 minutes).
-# NAP is BR/EDR only. BLE Just Works pairing is disabled so a rando cannot
-# "connect" without a PIN and without a network.
+# Pairing is open while Discoverable is on. pan0 only accepts DHCP/DNS,
+# SSH (22), and PiPedal (80). Everything else from the PAN is dropped.
 
 set -u
 
@@ -119,8 +118,7 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    # Keypad PIN never arrives on HCI; PIN Code Reply Auth-Fails in ~100ms.
-    # SSP is the link. Typed PIN interrupt is HTTP on pan0.
+    # SSP on so the iPad can form a link. Access on pan0 is filtered below.
     btmgmt_try ssp on
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
@@ -132,7 +130,7 @@ set_classic_nap_adapter() {
     local i
     for i in 1 2 3 4 5; do
         if hciconfig hci0 sspmode 2>/dev/null | grep -q Enabled; then
-            log "link up with SSP; type PIN ${PIN} at http://${ADDR}"
+            log "SSP on; pan0 allows SSH and PiPedal only"
             return 0
         fi
         btmgmt_try ssp on
@@ -152,7 +150,7 @@ set_pairing_visible() {
         adapter_set Discoverable "variant:boolean:true"
         touch "$PAIRING_FLAG"
         if [[ "$PAIRING_ACTIVE" != 1 ]]; then
-            log "pairing window open. After BT connects, type PIN ${PIN} at http://${ADDR}"
+            log "pairing window open. pan0: SSH + http://${ADDR} only"
         fi
         PAIRING_ACTIVE=1
     else
@@ -191,7 +189,9 @@ cleanup() {
     if [[ -n "${AUTH_PID}" ]]; then
         kill "${AUTH_PID}" >/dev/null 2>&1 || true
     fi
+    pkill -f /usr/sbin/pipedal-bt-auth >/dev/null 2>&1 || true
     nft delete table ip pipedal_bt >/dev/null 2>&1 || true
+    nft delete table ip6 pipedal_bt >/dev/null 2>&1 || true
     rm -f "$PAIRING_FLAG" /run/pipedal/bt-unlocked
     for adapter in /org/bluez/hci0 /org/bluez/hci1; do
         dbus-send --system --dest=org.bluez --type=method_call \
@@ -305,9 +305,31 @@ umask 077
 printf '* %s\n' "$PIN" > "$PIN_FILE"
 chmod 600 "$PIN_FILE"
 
+apply_pan0_filter() {
+    nft delete table ip pipedal_bt >/dev/null 2>&1 || true
+    nft delete table ip6 pipedal_bt >/dev/null 2>&1 || true
+    nft -f - <<'NFT' || log "nft pan0 filter failed"
+table ip pipedal_bt {
+    chain input {
+        type filter hook input priority filter; policy accept;
+        iifname "pan0" ct state established,related accept
+        iifname "pan0" udp dport { 53, 67 } accept
+        iifname "pan0" tcp dport { 22, 53, 80 } accept
+        iifname "pan0" drop
+    }
+}
+table ip6 pipedal_bt {
+    chain input {
+        type filter hook input priority filter; policy accept;
+        iifname "pan0" drop
+    }
+}
+NFT
+}
+
 python3 /usr/sbin/pipedal-bt-agent "$PIN_FILE" &
 AGENT_PID=$!
-log "PIN agent: pipedal-bt-agent (link only; PIN interrupt at http://${ADDR})"
+log "pairing agent: pipedal-bt-agent (open pairing)"
 
 (
     while true; do
@@ -372,11 +394,11 @@ EOF
 dnsmasq --keep-in-foreground --conf-file="$DNSMASQ_CONF" --dhcp-leasefile="$DNSMASQ_LEASES" --pid-file="${RUN_DIR}/bt-dnsmasq.pid" &
 DNSMASQ_PID=$!
 
-python3 /usr/sbin/pipedal-bt-auth "$PIN_FILE" &
-AUTH_PID=$!
-log "PIN interrupt: type ${PIN} at http://${ADDR} after Bluetooth connects"
+pkill -f /usr/sbin/pipedal-bt-auth >/dev/null 2>&1 || true
+apply_pan0_filter
+log "pan0 filter: SSH :22 and PiPedal :80 only"
 
-log "ready. Pair '${NAME}', then type PIN ${PIN} at http://${ADDR}"
+log "ready. Pair '${NAME}', then http://${ADDR} or ssh ${ADDR}"
 
 wait "$DNSMASQ_PID"
 exit $?

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run on the Pi as root: sudo bash ~/fix-bt-on-pi.sh
-# SSP off (iPad keypad PIN), installs NAP/agent, kills bluetoothctl, restarts NAP.
+# SSP on, installs NAP/agent, kills bluetoothctl, restarts NAP.
 set -euo pipefail
 USER_HOME="${SUDO_USER:+$(getent passwd "$SUDO_USER" | cut -d: -f6)}"
 USER_HOME="${USER_HOME:-/home/the97bradley}"
@@ -28,4 +28,4 @@ sleep 2
 echo "SSP: $(hciconfig hci0 sspmode | tr '\n' ' ')"
 echo "NAP: $(systemctl is-active pipedal-bt-nap)"
 journalctl -u pipedal-bt-nap -n 8 --no-pager
-echo "Pair pipedal, then type PIN 001037 at http://172.21.0.1"
+echo "Pair pipedal, then http://172.21.0.1 or ssh 172.21.0.1"

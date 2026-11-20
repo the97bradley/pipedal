@@ -166,7 +166,8 @@ at a time. Bluetooth remote access is the default iPad path: a second, separate 
 Wi-Fi (or cellular) for internet, and still open the PiPedal web UI over Bluetooth.
 
 It is enabled automatically when PiPedal is installed and a Bluetooth adapter is present, and it stays on across reboots.
-New devices must enter a 4–8 digit PIN. Just Works pairing is rejected. Change the name or PIN from
+Pairing is open while Discoverable is on. After a device pairs, the Bluetooth network only
+reaches PiPedal (port 80) and SSH (port 22). Change the name from
 **Settings → Bluetooth remote**, or:
 
     sudo pipedalconfig --enable-bluetooth pipedal 123456
@@ -174,14 +175,12 @@ New devices must enter a 4–8 digit PIN. Just Works pairing is rejected. Change
 The Pi offers a Bluetooth NAP named `pipedal` at **http://172.21.0.1**.
 DHCP on that link does **not** hand out a default route, so the iPad keeps using Wi-Fi for internet.
 
-A Bluetooth “Connected” with no PIN is **not** the PAN. Forget that pairing and use the steps below.
-
 ### How the iPad connects
 
 1. On the iPad, **Settings → Bluetooth → ⓘ next to pipedal → Forget This Device**.
-2. Leave the iPad on internet Wi-Fi. Tap **pipedal** and enter the PIN.
+2. Leave the iPad on internet Wi-Fi. Tap **pipedal**. If iPad shows Pair, tap Pair.
 3. Wait a few seconds. Open the main Settings list. **Ethernet** is the Bluetooth network — leave it Automatic (DHCP).
-4. Safari: **http://172.21.0.1**.
+4. Safari: **http://172.21.0.1**. SSH is to **172.21.0.1**.
 
 Pairing is only needed once. Bluetooth is for the web UI only, not for audio.
 On the Pi, `systemctl status pipedal-bt-nap` and `ip -br link` (look for `bnep`) show whether the network came up.

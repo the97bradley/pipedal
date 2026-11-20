@@ -97,6 +97,10 @@ class RadioPolicyTest(unittest.TestCase):
         conf = src[src.find("def RequestConfirmation"): src.find("def DisplayPinCode")]
         self.assertIn("def RequestConfirmation", conf)
         self.assertNotIn("raise Rejected", conf)
+        authz = src[src.find("def RequestAuthorization"): src.find("def RequestConfirmation")]
+        self.assertIn("def RequestAuthorization", authz)
+        self.assertNotIn("raise Rejected", authz)
+        self.assertIn("pairing open", src)
 
     def test_nap_keeps_ssp_on(self):
         with open(os.path.join(SCRIPTS, "pipedal-bt-nap"), encoding="utf-8") as f:
@@ -105,6 +109,15 @@ class RadioPolicyTest(unittest.TestCase):
         self.assertIn("sspmode 1", src)
         self.assertNotIn("ssp off", src)
         self.assertNotIn("sspmode 0", src)
+
+    def test_nap_allows_only_ssh_and_app(self):
+        with open(os.path.join(SCRIPTS, "pipedal-bt-nap"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("tcp dport { 22, 53, 80 }", src)
+        self.assertIn('iifname "pan0" drop', src)
+        self.assertIn("table ip6 pipedal_bt", src)
+        self.assertIn("nft delete table ip6 pipedal_bt", src)
+        self.assertNotIn("python3 /usr/sbin/pipedal-bt-auth", src)
 
 
 if __name__ == "__main__":

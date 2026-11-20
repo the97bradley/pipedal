@@ -47,6 +47,6 @@ export default class BluetoothConfigSettings {
         if (!this.allowNewDevices) {
             return "Hidden. Paired devices only. (" + this.deviceName + " · 172.21.0.1)";
         }
-        return "PIN required. (" + this.deviceName + " · 172.21.0.1)";
+        return "Pairing open. SSH + PiPedal only. (" + this.deviceName + " · 172.21.0.1)";
     }
 }

@@ -150,7 +150,7 @@ const BluetoothConfigDialog =
                             fullWidth
                             value={this.state.pin}
                             error={this.state.pinError}
-                            helperText={this.state.pinError ? this.state.pinErrorMessage : "After Bluetooth connects, type this PIN at http://172.21.0.1. That submit is the compare."}
+                            helperText={this.state.pinError ? this.state.pinErrorMessage : "Stored for the device. Bluetooth pairing is open; the BT network only allows PiPedal and SSH."}
                             inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 8 }}
                             onChange={(e) => this.setState({ pin: e.target.value, pinError: false, pinErrorMessage: "" })}
                             disabled={!this.state.enabled}
@@ -166,8 +166,8 @@ const BluetoothConfigDialog =
                             label="Discoverable"
                         />
                         <Typography variant="body2" color="textSecondary" style={{ lineHeight: "1.45em" }}>
-                            The Bluetooth keypad never delivers digits to the Pi. Type PIN {this.state.pin || "••••"}
-                            at http://172.21.0.1 after the link is up. That POST is compared immediately.
+                            Pairing is open while Discoverable is on. After Bluetooth connects, the PAN only
+                            reaches PiPedal at http://172.21.0.1 and SSH. Other ports on the Pi are dropped.
                         </Typography>
                         <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
@@ -175,7 +175,7 @@ const BluetoothConfigDialog =
                                 <li>iPad: Settings → Bluetooth → ⓘ on <b>{this.state.name || "pipedal"}</b> → Forget This Device.</li>
                                 <li>Tap <b>{this.state.name || "pipedal"}</b>. If iPad shows Pair, tap Pair.</li>
                                 <li>Wait a few seconds. Open the main Settings list. <b>Ethernet</b> is the Bluetooth network — leave it Automatic (DHCP).</li>
-                                <li>Safari: <b>http://172.21.0.1</b> and type PIN <b>{this.state.pin || "••••"}</b>. Submit compares it at once. Wrong PIN does not open PiPedal.</li>
+                                <li>Safari: <b>http://172.21.0.1</b> opens PiPedal. SSH is to <b>172.21.0.1</b>.</li>
                             </ol>
                         </Typography>
                     </DialogContent>

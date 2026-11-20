@@ -1,13 +1,10 @@
 #!/usr/bin/python3
 """BlueZ agent for the NAP link.
 
-iOS keypad PIN never arrives in userspace. HCI is silent while the keypad
-is up; PIN Code Reply then Authentication-Fails in ~100ms (immediate or
-after 20s). Do not wait on a timer. Do not PIN Code Reply.
+Pairing is open while Discoverable. Accept SSP confirm and Just Works.
+Do not PIN Code Reply: iOS keypad digits never arrive and Auth-Fails in ~100ms.
 
-The iPad types 001037 at http://172.21.0.1. That POST is the interrupt.
-This agent only brings the Bluetooth link up (SSP confirm) and rejects
-Just Works.
+pan0 filtering (SSH + PiPedal only) is in pipedal-bt-nap, not here.
 """
 import os
 import sys
@@ -58,24 +55,24 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        # No remote PIN is delivered here. Replying 001037 Auth-Fails in ~100ms.
-        log(f"RequestPinCode {device}: no iPad PIN on HCI; type it at http://172.21.0.1")
-        raise Rejected("PIN is compared at http://172.21.0.1")
+        # No remote PIN is delivered here. Replying Auth-Fails in ~100ms.
+        log(f"RequestPinCode {device}: no HCI PIN; pairing is SSP/open")
+        raise Rejected("use SSP pairing")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        log(f"rejected SSP passkey request from {device}")
-        raise Rejected("PIN is compared at http://172.21.0.1")
+        log(f"RequestPasskey {device}: pairing open, no passkey")
+        raise Rejected("use SSP pairing")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
-        log(f"rejected Just Works from {device}")
-        raise Rejected("PIN required")
+        log(f"RequestAuthorization {device}: pairing open")
+        self._begin_handshake()
+        return
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        # Link only. Typed PIN interrupt is pipedal-bt-auth POST.
-        log(f"RequestConfirmation {device} link ok; type PIN at http://172.21.0.1")
+        log(f"RequestConfirmation {device} pairing open")
         self._begin_handshake()
         return
 
@@ -138,7 +135,7 @@ def main():
         pass
     adapter_once()
     claim_agent()
-    log(f"{CAPABILITY} link agent; PIN interrupt at http://172.21.0.1 ({read_pin(PIN_FILE) or '?'})")
+    log(f"{CAPABILITY} link agent; pairing open")
     GLib.timeout_add(2000, claim_agent)
     GLib.MainLoop().run()
 
