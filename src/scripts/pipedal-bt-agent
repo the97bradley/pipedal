@@ -1,13 +1,13 @@
 #!/usr/bin/python3
-"""BlueZ agent: iPad types the Settings PIN.
+"""BlueZ agent for the NAP link.
 
-SSP numeric comparison is tap-Pair with a random number. That is not a PIN.
-Legacy PIN (SSP off) is RequestPinCode: this process returns the configured
-PIN, the iPad keypad sends what the user typed, the controller compares.
+iOS keypad PIN never arrives in userspace. HCI is silent while the keypad
+is up; PIN Code Reply then Authentication-Fails in ~100ms (immediate or
+after 20s). Do not wait on a timer. Do not PIN Code Reply.
 
-Do not run hciconfig/btmgmt from this process. That drops the ACL during
-PIN Code Reply. Do not rotate 001037/1037 across retries; the iPad still
-has the PIN the user typed.
+The iPad types 001037 at http://172.21.0.1. That POST is the interrupt.
+This agent only brings the Bluetooth link up (SSP confirm) and rejects
+Just Works.
 """
 import os
 import sys
@@ -19,12 +19,12 @@ from gi.repository import GLib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, "/usr/lib/pipedal")
-from pipedal_bt_pin import PIN_REPLY_MS, read_pin  # noqa: E402
+from pipedal_bt_pin import read_pin  # noqa: E402
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-CAPABILITY = "KeyboardOnly"
-HANDSHAKE_SEC = 35
+CAPABILITY = "KeyboardDisplay"
+HANDSHAKE_SEC = 30
 
 
 def log(msg):
@@ -35,17 +35,10 @@ class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
 
-class Canceled(dbus.DBusException):
-    _dbus_error_name = "org.bluez.Error.Canceled"
-
-
 class Agent(dbus.service.Object):
     def __init__(self, bus, path):
         super().__init__(bus, path)
         self._handshake_until = 0.0
-        self._pin_src = None
-        self._pin_reply = None
-        self._pin_error = None
 
     def _begin_handshake(self):
         self._handshake_until = time.time() + HANDSHAKE_SEC
@@ -54,26 +47,8 @@ class Agent(dbus.service.Object):
     def in_handshake(self):
         return time.time() < self._handshake_until
 
-    def _pin(self):
-        return read_pin(PIN_FILE)
-
-    def _cancel_pending_pin(self, send_error=False):
-        src = self._pin_src
-        err = self._pin_error
-        self._pin_src = None
-        self._pin_reply = None
-        self._pin_error = None
-        if src is not None:
-            GLib.source_remove(src)
-        if send_error and err is not None:
-            try:
-                err(Canceled("cancelled"))
-            except Exception:
-                pass
-
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Release(self):
-        self._cancel_pending_pin()
         log("Release")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
@@ -81,40 +56,16 @@ class Agent(dbus.service.Object):
         log(f"AuthorizeService {device} {uuid}")
         return
 
-    @dbus.service.method(
-        "org.bluez.Agent1",
-        in_signature="o",
-        out_signature="s",
-        async_callbacks=("reply_handler", "error_handler"),
-    )
-    def RequestPinCode(self, device, reply_handler, error_handler):
-        p = self._pin()
-        if not p:
-            error_handler(Rejected("No PIN configured"))
-            return
-        self._begin_handshake()
-        self._cancel_pending_pin()
-        self._pin_reply = reply_handler
-        self._pin_error = error_handler
-        log(f"RequestPinCode {device} keypad up; send {p} in {PIN_REPLY_MS}ms")
-
-        def send():
-            self._pin_src = None
-            self._pin_reply = None
-            self._pin_error = None
-            log(f"RequestPinCode {device} -> {p}")
-            try:
-                reply_handler(p)
-            except Exception as exc:
-                log(f"RequestPinCode reply failed: {exc}")
-            return False
-
-        self._pin_src = GLib.timeout_add(PIN_REPLY_MS, send)
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        # No remote PIN is delivered here. Replying 001037 Auth-Fails in ~100ms.
+        log(f"RequestPinCode {device}: no iPad PIN on HCI; type it at http://172.21.0.1")
+        raise Rejected("PIN is compared at http://172.21.0.1")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
         log(f"rejected SSP passkey request from {device}")
-        raise Rejected("PIN required")
+        raise Rejected("PIN is compared at http://172.21.0.1")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
@@ -123,8 +74,10 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        log(f"rejected SSP passkey {int(passkey):06d} from {device}; iPad must type PIN")
-        raise Rejected("PIN required")
+        # Link only. Typed PIN interrupt is pipedal-bt-auth POST.
+        log(f"RequestConfirmation {device} link ok; type PIN at http://172.21.0.1")
+        self._begin_handshake()
+        return
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
@@ -137,7 +90,6 @@ class Agent(dbus.service.Object):
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Cancel(self):
         log("Cancel")
-        self._cancel_pending_pin(send_error=True)
 
 
 def main():
@@ -186,7 +138,7 @@ def main():
         pass
     adapter_once()
     claim_agent()
-    log(f"{CAPABILITY} default agent (iPad types PIN {read_pin(PIN_FILE) or '?'})")
+    log(f"{CAPABILITY} link agent; PIN interrupt at http://172.21.0.1 ({read_pin(PIN_FILE) or '?'})")
     GLib.timeout_add(2000, claim_agent)
     GLib.MainLoop().run()
 

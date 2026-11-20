@@ -17,7 +17,7 @@ systemctl --user --machine="${SUDO_USER:-the97bradley}@.host" disable --now pipe
 pkill -u "${SUDO_USER:-the97bradley}" -f "bluetoothctl" 2>/dev/null || true
 
 hciconfig hci0 up || true
-hciconfig hci0 sspmode 0
+hciconfig hci0 sspmode 1
 hciconfig hci0 class 0x020100
 hciconfig hci0 piscan || true
 
@@ -28,4 +28,4 @@ sleep 2
 echo "SSP: $(hciconfig hci0 sspmode | tr '\n' ' ')"
 echo "NAP: $(systemctl is-active pipedal-bt-nap)"
 journalctl -u pipedal-bt-nap -n 8 --no-pager
-echo "Pair pipedal: type PIN 001037 on the iPad keypad"
+echo "Pair pipedal, then type PIN 001037 at http://172.21.0.1"

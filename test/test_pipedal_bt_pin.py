@@ -88,28 +88,23 @@ class RadioPolicyTest(unittest.TestCase):
         self.assertNotIn("subprocess", src)
         self.assertNotIn("force_legacy_pin", src)
         self.assertNotIn("timeout_add_seconds(30", src)
-        self.assertIn('CAPABILITY = "KeyboardOnly"', src)
-        pin_fn = src[src.find("def RequestPinCode") - 200 : src.find("def RequestPasskey")]
-        self.assertIn("async_callbacks", pin_fn)
-        self.assertIn("timeout_add", pin_fn)
-        self.assertIn("PIN_REPLY_MS", pin_fn)
+        self.assertIn('CAPABILITY = "KeyboardDisplay"', src)
+        pin_fn = src[src.find("def RequestPinCode"): src.find("def RequestPasskey")]
+        self.assertIn("raise Rejected", pin_fn)
         self.assertNotIn("sleep", pin_fn)
+        self.assertNotIn("timeout_add", pin_fn)
         self.assertNotIn("_next_pin", src)
-        self.assertGreaterEqual(pin.PIN_REPLY_MS, 15000)
-        self.assertLess(pin.PIN_REPLY_MS, 25000)
         conf = src[src.find("def RequestConfirmation"): src.find("def DisplayPinCode")]
         self.assertIn("def RequestConfirmation", conf)
-        self.assertIn("raise Rejected", conf)
-        passkey = src[src.find("def RequestPasskey"): src.find("def RequestAuthorization")]
-        self.assertIn("raise Rejected", passkey)
+        self.assertNotIn("raise Rejected", conf)
 
-    def test_nap_keeps_ssp_off(self):
+    def test_nap_keeps_ssp_on(self):
         with open(os.path.join(SCRIPTS, "pipedal-bt-nap"), encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("ssp off", src)
-        self.assertIn("sspmode 0", src)
-        self.assertNotIn("ssp on", src)
-        self.assertNotIn("sspmode 1", src)
+        self.assertIn("ssp on", src)
+        self.assertIn("sspmode 1", src)
+        self.assertNotIn("ssp off", src)
+        self.assertNotIn("sspmode 0", src)
 
 
 if __name__ == "__main__":

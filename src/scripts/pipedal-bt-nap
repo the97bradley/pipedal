@@ -119,27 +119,27 @@ set_classic_nap_adapter() {
     btmgmt_try le off
     btmgmt_try advertising off
     btmgmt_try sc off
-    # SSP off: iPad keypad PIN. Numeric comparison is tap-Pair with a random
-    # number, not the Settings PIN.
-    btmgmt_try ssp off
+    # Keypad PIN never arrives on HCI; PIN Code Reply Auth-Fails in ~100ms.
+    # SSP is the link. Typed PIN interrupt is HTTP on pan0.
+    btmgmt_try ssp on
     hciconfig_try hci0 up
     hciconfig_try hci0 class 0x020100
-    hciconfig_try hci0 sspmode 0
+    hciconfig_try hci0 sspmode 1
     hciconfig_try hci0 noleadv
     hciconfig_try hci0 piscan
     adapter_set Powered "variant:boolean:true"
     adapter_set Alias "variant:string:${NAME}"
     local i
     for i in 1 2 3 4 5; do
-        if hciconfig hci0 sspmode 2>/dev/null | grep -q Disabled; then
-            log "SSP off; iPad must type PIN ${PIN}"
+        if hciconfig hci0 sspmode 2>/dev/null | grep -q Enabled; then
+            log "link up with SSP; type PIN ${PIN} at http://${ADDR}"
             return 0
         fi
-        btmgmt_try ssp off
-        hciconfig_try hci0 sspmode 0
+        btmgmt_try ssp on
+        hciconfig_try hci0 sspmode 1
         sleep 0.3
     done
-    log "WARNING: SSP still enabled; iPad will get tap-Pair instead of a keypad"
+    log "WARNING: SSP still disabled"
 }
 
 set_pairing_visible() {
@@ -152,7 +152,7 @@ set_pairing_visible() {
         adapter_set Discoverable "variant:boolean:true"
         touch "$PAIRING_FLAG"
         if [[ "$PAIRING_ACTIVE" != 1 ]]; then
-            log "pairing window open. iPad types PIN ${PIN} on the keypad"
+            log "pairing window open. After BT connects, type PIN ${PIN} at http://${ADDR}"
         fi
         PAIRING_ACTIVE=1
     else
@@ -307,7 +307,7 @@ chmod 600 "$PIN_FILE"
 
 python3 /usr/sbin/pipedal-bt-agent "$PIN_FILE" &
 AGENT_PID=$!
-log "PIN agent: pipedal-bt-agent (iPad types PIN ${PIN}; Just Works rejected)"
+log "PIN agent: pipedal-bt-agent (link only; PIN interrupt at http://${ADDR})"
 
 (
     while true; do
@@ -374,9 +374,9 @@ DNSMASQ_PID=$!
 
 python3 /usr/sbin/pipedal-bt-auth "$PIN_FILE" &
 AUTH_PID=$!
-log "PIN compare: type ${PIN} on the iPad keypad, then http://${ADDR} if asked"
+log "PIN interrupt: type ${PIN} at http://${ADDR} after Bluetooth connects"
 
-log "ready. Pair '${NAME}' by typing PIN ${PIN} on the iPad"
+log "ready. Pair '${NAME}', then type PIN ${PIN} at http://${ADDR}"
 
 wait "$DNSMASQ_PID"
 exit $?

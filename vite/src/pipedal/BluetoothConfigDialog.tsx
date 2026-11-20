@@ -150,7 +150,7 @@ const BluetoothConfigDialog =
                             fullWidth
                             value={this.state.pin}
                             error={this.state.pinError}
-                            helperText={this.state.pinError ? this.state.pinErrorMessage : "iPad types this PIN on the Bluetooth keypad. Wrong PIN cannot pair."}
+                            helperText={this.state.pinError ? this.state.pinErrorMessage : "After Bluetooth connects, type this PIN at http://172.21.0.1. That submit is the compare."}
                             inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 8 }}
                             onChange={(e) => this.setState({ pin: e.target.value, pinError: false, pinErrorMessage: "" })}
                             disabled={!this.state.enabled}
@@ -166,16 +166,16 @@ const BluetoothConfigDialog =
                             label="Discoverable"
                         />
                         <Typography variant="body2" color="textSecondary" style={{ lineHeight: "1.45em" }}>
-                            New devices must type PIN {this.state.pin || "••••"} on the iPad keypad. Tap-Pair
-                            without a PIN is rejected.
+                            The Bluetooth keypad never delivers digits to the Pi. Type PIN {this.state.pin || "••••"}
+                            at http://172.21.0.1 after the link is up. That POST is compared immediately.
                         </Typography>
                         <Typography variant="subtitle2" style={{ marginTop: 16 }}>How the iPad connects</Typography>
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
                             <ol style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0 }}>
                                 <li>iPad: Settings → Bluetooth → ⓘ on <b>{this.state.name || "pipedal"}</b> → Forget This Device.</li>
-                                <li>Tap <b>{this.state.name || "pipedal"}</b>. Type PIN <b>{this.state.pin || "••••"}</b> on the keypad as soon as it appears, then Pair. Wait a few seconds after that.</li>
+                                <li>Tap <b>{this.state.name || "pipedal"}</b>. If iPad shows Pair, tap Pair.</li>
                                 <li>Wait a few seconds. Open the main Settings list. <b>Ethernet</b> is the Bluetooth network — leave it Automatic (DHCP).</li>
-                                <li>Safari: <b>http://172.21.0.1</b>. If it asks for the PIN again, type <b>{this.state.pin || "••••"}</b>.</li>
+                                <li>Safari: <b>http://172.21.0.1</b> and type PIN <b>{this.state.pin || "••••"}</b>. Submit compares it at once. Wrong PIN does not open PiPedal.</li>
                             </ol>
                         </Typography>
                     </DialogContent>

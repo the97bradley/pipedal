@@ -75,7 +75,7 @@ PAGE = """<!doctype html>
 </head>
 <body style="font-family:sans-serif;max-width:22em;margin:3em auto;padding:0 1em">
 <h1 style="font-size:1.4em">PiPedal</h1>
-<p>Type the pairing PIN. If it matches, this page opens the pedal.</p>
+<p>Type the pairing PIN and submit. Compare is immediate.</p>
 <form method="post">
 <input name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" autofocus
  style="font-size:1.4em;width:8em;letter-spacing:0.15em">
@@ -113,13 +113,14 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length).decode("utf-8", "replace")
         got = (urllib.parse.parse_qs(raw).get("pin") or [""])[0].strip()
         expected = read_pin()
-        if pins_match(got, expected):
+        matched = pins_match(got, expected)
+        log(f"interrupt: received PIN {got!r} from {self.client_address[0]} match={matched}")
+        if matched:
             unlock_ui()
             self.send_response(302)
             self.send_header("Location", "/")
             self.end_headers()
             return
-        log(f"PIN mismatch from {self.client_address[0]}")
         self._html(403, PAGE.format(err="Wrong PIN"))
 
 
