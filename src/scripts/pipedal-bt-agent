@@ -1,13 +1,13 @@
 #!/usr/bin/python3
-"""BlueZ agent for PiPedal NAP.
+"""BlueZ agent: iPad types the Settings PIN.
 
-iOS keypad PIN (RequestPinCode) is compared on the controller and, on
-bcm4345, fails with Authentication Failure in ~100ms for both 001037 and
-1037. The iPad link is allowed via SSP confirmation; pipedal-bt-auth
-compares the Settings PIN before PiPedal is reachable.
+SSP numeric comparison is tap-Pair with a random number. That is not a PIN.
+Legacy PIN (SSP off) is RequestPinCode: this process returns the configured
+PIN, the iPad keypad sends what the user typed, the controller compares.
 
 Do not run hciconfig/btmgmt from this process. That drops the ACL during
-PIN Code Reply.
+PIN Code Reply. Do not rotate 001037/1037 across retries; the iPad still
+has the PIN the user typed.
 """
 import os
 import sys
@@ -19,11 +19,11 @@ from gi.repository import GLib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, "/usr/lib/pipedal")
-from pipedal_bt_pin import pin_variants, read_pin  # noqa: E402
+from pipedal_bt_pin import read_pin  # noqa: E402
 
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
-CAPABILITY = "KeyboardDisplay"
+CAPABILITY = "KeyboardOnly"
 HANDSHAKE_SEC = 30
 
 
@@ -39,7 +39,6 @@ class Agent(dbus.service.Object):
     def __init__(self, bus, path):
         super().__init__(bus, path)
         self._handshake_until = 0.0
-        self._try = {}
 
     def _begin_handshake(self):
         self._handshake_until = time.time() + HANDSHAKE_SEC
@@ -48,13 +47,8 @@ class Agent(dbus.service.Object):
     def in_handshake(self):
         return time.time() < self._handshake_until
 
-    def _next_pin(self, device):
-        variants = pin_variants(read_pin(PIN_FILE))
-        if not variants:
-            return ""
-        n = self._try.get(str(device), 0)
-        self._try[str(device)] = n + 1
-        return variants[n % len(variants)]
+    def _pin(self):
+        return read_pin(PIN_FILE)
 
     @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
     def Release(self):
@@ -67,21 +61,17 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
-        p = self._next_pin(device)
+        p = self._pin()
         if not p:
             raise Rejected("No PIN configured")
         self._begin_handshake()
-        log(f"RequestPinCode {device} -> {p}")
+        log(f"RequestPinCode {device} -> {p} (iPad must type this)")
         return p
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
-        p = self._next_pin(device)
-        if not p:
-            raise Rejected("No PIN configured")
-        self._begin_handshake()
-        log(f"RequestPasskey {device} -> {int(p)}")
-        return dbus.UInt32(int(p))
+        log(f"rejected SSP passkey request from {device}")
+        raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
@@ -90,11 +80,8 @@ class Agent(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
-        # iOS DisplayYesNo. Rejecting this leaves only legacy PIN, which HCI
-        # traces show failing in ~100ms after the keypad for 001037 and 1037.
-        log(f"RequestConfirmation {device} passkey={int(passkey):06d}; PIN still required at http://172.21.0.1")
-        self._begin_handshake()
-        return
+        log(f"rejected SSP passkey {int(passkey):06d} from {device}; iPad must type PIN")
+        raise Rejected("PIN required")
 
     @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
@@ -155,7 +142,7 @@ def main():
         pass
     adapter_once()
     claim_agent()
-    log(f"{CAPABILITY} default agent (NAP PIN {read_pin(PIN_FILE) or '?'} at http://172.21.0.1)")
+    log(f"{CAPABILITY} default agent (iPad types PIN {read_pin(PIN_FILE) or '?'})")
     GLib.timeout_add(2000, claim_agent)
     GLib.MainLoop().run()
 

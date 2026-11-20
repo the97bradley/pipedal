@@ -1,9 +1,8 @@
-"""PIN compare helpers for PiPedal Bluetooth.
+"""PIN helpers for PiPedal Bluetooth.
 
-iOS keypad pairing does not deliver the typed digits to userspace. HCI
-traces on bcm4345 show PIN Code Reply 001037 and 1037 both followed by
-Authentication Failure in ~100ms. Software compare (HTTP on pan0) is the
-path that can accept or reject 001037.
+RequestPinCode returns the configured PIN. The iPad keypad sends the
+typed digits. The controller compares them. Do not rotate PIN spellings
+across retries, and do not run hciconfig during that reply.
 """
 import os
 
