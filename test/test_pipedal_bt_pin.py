@@ -95,8 +95,8 @@ class RadioPolicyTest(unittest.TestCase):
         self.assertIn("PIN_REPLY_MS", pin_fn)
         self.assertNotIn("sleep", pin_fn)
         self.assertNotIn("_next_pin", src)
-        self.assertGreaterEqual(pin.PIN_REPLY_MS, 8000)
-        self.assertLess(pin.PIN_REPLY_MS, 20000)
+        self.assertGreaterEqual(pin.PIN_REPLY_MS, 15000)
+        self.assertLess(pin.PIN_REPLY_MS, 25000)
         conf = src[src.find("def RequestConfirmation"): src.find("def DisplayPinCode")]
         self.assertIn("def RequestConfirmation", conf)
         self.assertIn("raise Rejected", conf)

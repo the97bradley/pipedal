@@ -24,7 +24,7 @@ from pipedal_bt_pin import PIN_REPLY_MS, read_pin  # noqa: E402
 PIN_FILE = "/run/pipedal/bt-pin"
 AGENT_PATH = "/org/pipedal/bt_agent"
 CAPABILITY = "KeyboardOnly"
-HANDSHAKE_SEC = 30
+HANDSHAKE_SEC = 35
 
 
 def log(msg):
