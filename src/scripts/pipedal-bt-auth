@@ -21,18 +21,30 @@ UNLOCKED = "/run/pipedal/bt-unlocked"
 LISTEN = ("172.21.0.1", 8099)
 NFT_TABLE = "pipedal_bt"
 
-
-def nft_lock():
-    subprocess.call(["nft", "delete", "table", "ip", NFT_TABLE], stderr=subprocess.DEVNULL)
-    script = f"""
+# Pairing can happen without a PIN. Until the HTTP PIN matches, pan0 may only
+# talk DHCP/DNS and the PIN page. Everything else from the PAN is dropped.
+NFT_LOCK_SCRIPT = f"""
 table ip {NFT_TABLE} {{
     chain prerouting {{
-        type nat hook prerouting priority dstnat;
+        type nat hook prerouting priority dstnat; policy accept;
         iifname "pan0" tcp dport 80 redirect to :8099
+    }}
+    chain input {{
+        type filter hook input priority filter; policy accept;
+        iifname "pan0" ct state established,related accept
+        iifname "pan0" udp dport {{ 53, 67 }} accept
+        iifname "pan0" tcp dport 8099 accept
+        iifname "pan0" drop
     }}
 }}
 """
-    proc = subprocess.run(["nft", "-f", "-"], input=script, text=True, capture_output=True)
+
+
+def nft_lock():
+    subprocess.call(["nft", "delete", "table", "ip", NFT_TABLE], stderr=subprocess.DEVNULL)
+    proc = subprocess.run(
+        ["nft", "-f", "-"], input=NFT_LOCK_SCRIPT, text=True, capture_output=True
+    )
     if proc.returncode != 0:
         log(f"nft lock failed: {proc.stderr.strip()}")
         return False

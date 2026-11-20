@@ -84,6 +84,13 @@ class HttpPinGateTest(unittest.TestCase):
         body = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/", timeout=2).read()
         self.assertIn(b"name=\"pin\"", body)
 
+    def test_pan0_dropped_until_pin(self):
+        script = self.mod.NFT_LOCK_SCRIPT
+        self.assertIn('tcp dport 80 redirect to :8099', script)
+        self.assertIn("tcp dport 8099 accept", script)
+        self.assertIn('iifname "pan0" drop', script)
+        self.assertIn("udp dport", script)
+
 
 if __name__ == "__main__":
     unittest.main()
