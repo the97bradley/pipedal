@@ -89,11 +89,14 @@ class RadioPolicyTest(unittest.TestCase):
         self.assertNotIn("force_legacy_pin", src)
         self.assertNotIn("timeout_add_seconds(30", src)
         self.assertIn('CAPABILITY = "KeyboardOnly"', src)
-        pin_fn = src[src.find("def RequestPinCode"): src.find("def RequestPasskey")]
-        self.assertIn("return p", pin_fn)
+        pin_fn = src[src.find("def RequestPinCode") - 200 : src.find("def RequestPasskey")]
+        self.assertIn("async_callbacks", pin_fn)
+        self.assertIn("timeout_add", pin_fn)
+        self.assertIn("PIN_REPLY_MS", pin_fn)
         self.assertNotIn("sleep", pin_fn)
-        self.assertNotIn("timeout_add", pin_fn)
         self.assertNotIn("_next_pin", src)
+        self.assertGreaterEqual(pin.PIN_REPLY_MS, 8000)
+        self.assertLess(pin.PIN_REPLY_MS, 20000)
         conf = src[src.find("def RequestConfirmation"): src.find("def DisplayPinCode")]
         self.assertIn("def RequestConfirmation", conf)
         self.assertIn("raise Rejected", conf)

@@ -173,7 +173,7 @@ const BluetoothConfigDialog =
                         <Typography variant="body2" color="textSecondary" component="div" style={{ lineHeight: "1.45em" }}>
                             <ol style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0 }}>
                                 <li>iPad: Settings → Bluetooth → ⓘ on <b>{this.state.name || "pipedal"}</b> → Forget This Device.</li>
-                                <li>Tap <b>{this.state.name || "pipedal"}</b>. Type PIN <b>{this.state.pin || "••••"}</b> on the keypad, then Pair.</li>
+                                <li>Tap <b>{this.state.name || "pipedal"}</b>. Type PIN <b>{this.state.pin || "••••"}</b> on the keypad as soon as it appears, then Pair. Wait a few seconds after that.</li>
                                 <li>Wait a few seconds. Open the main Settings list. <b>Ethernet</b> is the Bluetooth network — leave it Automatic (DHCP).</li>
                                 <li>Safari: <b>http://172.21.0.1</b>. If it asks for the PIN again, type <b>{this.state.pin || "••••"}</b>.</li>
                             </ol>

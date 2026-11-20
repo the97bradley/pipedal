@@ -7,6 +7,10 @@ across retries, and do not run hciconfig during that reply.
 import os
 
 DEFAULT_PIN_FILE = "/run/pipedal/bt-pin"
+# Immediate PIN Code Reply Auth-Fails in ~100ms (btmon 46.795 → 46.898) before
+# the iPad can type. Holding 30s lets the user type, then iOS times out.
+# Reply after this delay so both PINs are present and under the ~30s window.
+PIN_REPLY_MS = 10000
 
 
 def parse_pin_line(line):
